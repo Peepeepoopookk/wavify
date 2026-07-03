@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M46,66 C46,71.5 41.5,76 36,76 C30.5,76 26,71.5 26,66 C26,60.5 30.5,56 36,56 C38.5,56 40.8,57 42.5,58.5 L42.5,30 L76.5,22 L76.5,58 C76.5,63.5 72,68 66.5,68 C61,68 56.5,63.5 56.5,58 C56.5,52.5 61,48 66.5,48 C69,48 71.3,49 73,50.5 L73,32 L46,38 L46,66 Z"
+        android:strokeWidth="1"
+        android:strokeColor="#00000000">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="76.5"
+                android:endY="76.0"
+                android:startX="26.0"
+                android:startY="22.0"
+                android:type="linear">
+                <item
+                    android:color="#00C6FF"
+                    android:offset="0.0" />
+                <item
+                    android:color="#007AFF"
+                    android:offset="0.5" />
+                <item
+                    android:color="#0040FF"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Accent wave element -->
+    <path
+        android:pathData="M24,84 Q54,78 84,84"
+        android:strokeWidth="3.5"
+        android:strokeColor="#007AFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M34,90 Q54,86 74,90"
+        android:strokeWidth="2"
+        android:strokeColor="#00C6FF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

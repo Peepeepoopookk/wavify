@@ -1,0 +1,6 @@
+{
+  "name": "Wavify",
+  "description": "A elegant native music player styled with an Apple Music inspired pure white aesthetic, featuring dynamic Palette color extraction, real-time search and filter, full-screen interactive controls, local downloads, and fluid media playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
