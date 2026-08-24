@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.AlbumArtImage
 import com.example.model.Track
+import com.example.model.RepeatMode
 import com.example.ui.components.TappableArtistText
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
@@ -70,7 +71,7 @@ fun NowPlayingScreen(
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val isShuffleEnabled by viewModel.isShuffleEnabled.collectAsStateWithLifecycle()
-    val isRepeatEnabled by viewModel.isRepeatEnabled.collectAsStateWithLifecycle()
+    val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val favoriteTrackIds by viewModel.favoriteTrackIds.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val queueItems by viewModel.playbackQueue.collectAsStateWithLifecycle()
@@ -99,7 +100,7 @@ fun NowPlayingScreen(
         targetValue = if (isNextTrackLoading) 1.2f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(600, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ),
         label = "nextPulseScale"
     )
@@ -108,7 +109,7 @@ fun NowPlayingScreen(
         targetValue = if (isNextTrackLoading) 0.6f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(600, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ),
         label = "nextPulseAlpha"
     )
@@ -399,9 +400,15 @@ fun NowPlayingScreen(
                     modifier = Modifier.testTag("repeat_button").size(48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Repeat,
+                        imageVector = when (repeatMode) {
+                            RepeatMode.ONE -> Icons.Default.RepeatOne
+                            else -> Icons.Default.Repeat
+                        },
                         contentDescription = "Repeat",
-                        tint = if (isRepeatEnabled) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = when (repeatMode) {
+                            RepeatMode.OFF -> MaterialTheme.colorScheme.onSurfaceVariant
+                            RepeatMode.ALL, RepeatMode.ONE -> accentColor
+                        },
                         modifier = Modifier.size(28.dp)
                     )
                 }

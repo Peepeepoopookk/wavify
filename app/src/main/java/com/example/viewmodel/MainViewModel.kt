@@ -25,6 +25,7 @@ import com.example.BuildConfig
 import com.example.model.Track
 import com.example.model.Artist
 import com.example.model.ImportedPlaylist
+import com.example.model.RepeatMode
 import com.example.model.fallbackAlbumArtFor
 import com.example.repository.DriveRepository
 import com.example.repository.ImportRepository
@@ -198,8 +199,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isShuffleEnabled = MutableStateFlow(false)
     val isShuffleEnabled: StateFlow<Boolean> = _isShuffleEnabled.asStateFlow()
 
-    private val _isRepeatEnabled = MutableStateFlow(false)
-    val isRepeatEnabled: StateFlow<Boolean> = _isRepeatEnabled.asStateFlow()
+    private val _repeatMode = MutableStateFlow(RepeatMode.OFF)
+    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
 
     private val _sleepTimerRemainingMillis = MutableStateFlow(0L)
     val sleepTimerRemainingMillis: StateFlow<Long> = _sleepTimerRemainingMillis.asStateFlow()
@@ -445,6 +446,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             if (duration > 0 && duration != C.TIME_UNSET) {
                                 _playbackDuration.value = duration
                             }
+                        }
+
+                        if (state == Player.STATE_ENDED) {
+                            handleQueueEnded()
                         }
                     }
 
@@ -1418,8 +1423,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleRepeat() {
-        _isRepeatEnabled.value = !_isRepeatEnabled.value
-        player?.repeatMode = if (_isRepeatEnabled.value) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        _repeatMode.value = when (_repeatMode.value) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        player?.repeatMode = when (_repeatMode.value) {
+            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF   // ALL is handled at app level below, NOT via ExoPlayer's native repeat
+        }
+    }
+
+    private fun handleQueueEnded() {
+        if (_repeatMode.value != RepeatMode.ALL) return
+        if (originalPlaybackSource.isEmpty()) return
+
+        val restartSource = if (_isShuffleEnabled.value) {
+            originalPlaybackSource.shuffled()
+        } else {
+            originalPlaybackSource
+        }
+
+        val firstTrack = restartSource.firstOrNull() ?: return
+        setTrack(firstTrack, restartSource)
     }
 
     fun startSleepTimer(minutes: Int) {
