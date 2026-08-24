@@ -102,6 +102,10 @@ import com.example.model.resolveAlbumArt
 import com.example.viewmodel.ProfileViewModel
 import com.example.viewmodel.EqualizerViewModel
 import com.example.viewmodel.ImportViewModel
+import com.example.viewmodel.AppUpdateState
+import com.example.ui.components.UpdateDialog
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
 const val ROUTE_HOME = "home"
@@ -235,8 +239,27 @@ fun MainAppScaffold(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination?.route ?: "home"
 
+    val context = LocalContext.current
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     var isNowPlayingExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(updateState) {
+        when (val state = updateState) {
+            is AppUpdateState.UpToDate -> {
+                Toast.makeText(context, "Wavify is up to date (v${state.version})", Toast.LENGTH_SHORT).show()
+                viewModel.dismissUpdateDialog()
+            }
+            is AppUpdateState.Error -> {
+                Toast.makeText(context, "Update check: ${state.message}", Toast.LENGTH_SHORT).show()
+                viewModel.dismissUpdateDialog()
+            }
+            is AppUpdateState.Checking -> {
+                Toast.makeText(context, "Checking for updates...", Toast.LENGTH_SHORT).show()
+            }
+            else -> {}
+        }
+    }
 
     val predictiveBackProgress = remember { Animatable(0f) }
 
@@ -603,6 +626,9 @@ fun MainAppScaffold(
                         },
                         onEqualizerClick = {
                             navController.navigate(ROUTE_EQUALIZER)
+                        },
+                        onCheckForUpdates = {
+                            viewModel.checkForUpdates(isUserInitiated = true, forceCheck = true)
                         }
                     )
                 }
@@ -699,6 +725,22 @@ fun MainAppScaffold(
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
                 }
+            }
+
+            (updateState as? AppUpdateState.Available)?.let { availableState ->
+                UpdateDialog(
+                    releaseInfo = availableState.release,
+                    currentVersion = availableState.currentVersion,
+                    isDownloading = availableState.isDownloading,
+                    downloadProgress = availableState.downloadProgress,
+                    downloadedBytes = availableState.downloadedBytes,
+                    totalBytes = availableState.totalBytes,
+                    downloadedFile = availableState.downloadedFile,
+                    errorMessage = availableState.error,
+                    onUpdateClick = { viewModel.startUpdateDownload() },
+                    onInstallClick = { file -> viewModel.installDownloadedApk(file) },
+                    onDismiss = { viewModel.dismissUpdateDialog() }
+                )
             }
         }
     }

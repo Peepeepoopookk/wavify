@@ -67,6 +67,9 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import com.example.download.DownloadManager
 import com.example.download.TrackDownloadWorker
+import com.example.util.UpdateManager
+import com.example.util.AppReleaseInfo
+import com.example.util.UpdateCheckResult
 
 enum class LayoutType {
     GRID, ROW
@@ -100,6 +103,23 @@ data class ImportedPlaylistDetailState(
         get() = playlist?.let { it.track_ids.isNotEmpty() || it.total_tracks > 0 || it.tracks.isNotEmpty() } == true
 }
 
+sealed class AppUpdateState {
+    object Idle : AppUpdateState()
+    object Checking : AppUpdateState()
+    data class Available(
+        val release: AppReleaseInfo,
+        val currentVersion: String = BuildConfig.VERSION_NAME,
+        val isDownloading: Boolean = false,
+        val downloadProgress: Float = 0f,
+        val downloadedBytes: Long = 0L,
+        val totalBytes: Long = 0L,
+        val downloadedFile: File? = null,
+        val error: String? = null
+    ) : AppUpdateState()
+    data class UpToDate(val version: String = BuildConfig.VERSION_NAME) : AppUpdateState()
+    data class Error(val message: String) : AppUpdateState()
+}
+
 fun normalizeGenreName(genre: String): String {
     return genre.trim().replace(Regex("\\s+"), " ").lowercase()
 }
@@ -124,6 +144,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val driveRepository = DriveRepository(application)
     private val importRepository = ImportRepository(application)
     private val userPrefsRepository = UserPreferencesRepository(application)
+    private val updateManager = UpdateManager(application)
     private val playlistDao = WavifyDatabase.getDatabase(application).playlistDao()
     private val downloadedTrackDao = WavifyDatabase.getDatabase(application).downloadedTrackDao()
     private val cachedTrackDao = WavifyDatabase.getDatabase(application).cachedTrackDao()
@@ -132,6 +153,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val handledDownloadWorkIds = mutableSetOf<java.util.UUID>()
     @OptIn(UnstableApi::class)
     private val audioPrefetcher = AudioPrefetcher(application)
+    
+    private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
+    val updateState: StateFlow<AppUpdateState> = _updateState.asStateFlow()
     
     private val _homeSections = kotlinx.coroutines.flow.MutableStateFlow<List<HomeSectionData>>(emptyList())
     val homeSections: kotlinx.coroutines.flow.StateFlow<List<HomeSectionData>> = _homeSections
@@ -491,6 +515,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         startPlaybackTicker()
+
+        // Check for app updates asynchronously on startup
+        viewModelScope.launch {
+            delay(3000)
+            checkForUpdates(isUserInitiated = false)
+        }
     }
 
     private fun observeCachedTracks() {
@@ -1618,6 +1648,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isNextTrackLoading.value = false
             }
         }
+    }
+
+    fun checkForUpdates(isUserInitiated: Boolean = false, forceCheck: Boolean = false) {
+        if (_offlineModeEnabled.value) return
+        viewModelScope.launch {
+            if (isUserInitiated) {
+                _updateState.value = AppUpdateState.Checking
+            }
+            when (val result = updateManager.checkForUpdates(forceCheck = forceCheck)) {
+                is UpdateCheckResult.Available -> {
+                    _updateState.value = AppUpdateState.Available(
+                        release = result.release,
+                        currentVersion = result.currentVersion
+                    )
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    if (isUserInitiated) {
+                        _updateState.value = AppUpdateState.UpToDate(result.currentVersion)
+                    } else {
+                        _updateState.value = AppUpdateState.Idle
+                    }
+                }
+                is UpdateCheckResult.Error -> {
+                    if (isUserInitiated) {
+                        _updateState.value = AppUpdateState.Error(result.message)
+                    } else {
+                        _updateState.value = AppUpdateState.Idle
+                    }
+                }
+            }
+        }
+    }
+
+    fun startUpdateDownload() {
+        val currentState = _updateState.value as? AppUpdateState.Available ?: return
+        if (currentState.isDownloading) return
+
+        _updateState.value = currentState.copy(
+            isDownloading = true,
+            downloadProgress = 0f,
+            downloadedBytes = 0L,
+            totalBytes = 0L,
+            error = null
+        )
+
+        viewModelScope.launch {
+            val result = updateManager.downloadApk(currentState.release) { progress, downloaded, total ->
+                _updateState.value = (_updateState.value as? AppUpdateState.Available)?.copy(
+                    downloadProgress = progress,
+                    downloadedBytes = downloaded,
+                    totalBytes = total
+                ) ?: _updateState.value
+            }
+
+            result.fold(
+                onSuccess = { file ->
+                    _updateState.value = (_updateState.value as? AppUpdateState.Available)?.copy(
+                        isDownloading = false,
+                        downloadProgress = 1f,
+                        downloadedFile = file,
+                        error = null
+                    ) ?: _updateState.value
+                    // Automatically prompt the OS package installer on download completion
+                    updateManager.installApk(file)
+                },
+                onFailure = { error ->
+                    _updateState.value = (_updateState.value as? AppUpdateState.Available)?.copy(
+                        isDownloading = false,
+                        error = error.localizedMessage ?: "Failed to download update"
+                    ) ?: _updateState.value
+                }
+            )
+        }
+    }
+
+    fun installDownloadedApk(file: File) {
+        updateManager.installApk(file)
+    }
+
+    fun dismissUpdateDialog() {
+        _updateState.value = AppUpdateState.Idle
     }
 
     override fun onCleared() {

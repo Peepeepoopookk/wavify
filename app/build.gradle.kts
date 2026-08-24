@@ -21,6 +21,8 @@ android {
     buildConfigField("String", "WAVIFY_PROXY_BASE_URL", "\"https://wavify-proxy.onrender.com\"")
     buildConfigField("String", "GOOGLE_DRIVE_BASE_URL", "\"https://drive.google.com/\"")
     buildConfigField("String", "GOOGLE_DRIVE_DATABASE_FILE_ID", "\"1kRreUe9j3jBzT6UF3QQpvaEgE70WdZ6i\"")
+    buildConfigField("String", "GITHUB_RELEASES_URL", "\"https://api.github.com/repos/Peepeepoopookk/wavify/releases/latest\"")
+    buildConfigField("String", "DASHBOARD_RELEASE_URL", "\"https://wavify-proxy.onrender.com/api/app/release\"")
   }
 
   signingConfigs {

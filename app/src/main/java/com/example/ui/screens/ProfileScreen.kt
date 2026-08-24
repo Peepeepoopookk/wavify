@@ -38,9 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.BuildConfig
 import com.example.viewmodel.ProfileViewModel
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -49,6 +51,7 @@ import kotlinx.coroutines.withContext
 fun ProfileScreen(
     onBackClick: () -> Unit,
     onEqualizerClick: () -> Unit,
+    onCheckForUpdates: () -> Unit = {},
     viewModel: ProfileViewModel = viewModel()
 ) {
     val userPrefs by viewModel.userPreferences.collectAsStateWithLifecycle()
@@ -61,14 +64,14 @@ fun ProfileScreen(
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                coroutineScope.launch(Dispatchers.IO) {
                     val file = File(context.filesDir, "profile_picture.jpg")
                     context.contentResolver.openInputStream(uri)?.use { input ->
                         FileOutputStream(file).use { output ->
                             input.copyTo(output)
                         }
                     }
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
                         viewModel.updateProfilePicturePath(file.absolutePath)
                     }
                 }
@@ -137,9 +140,9 @@ fun ProfileScreen(
             var profileImageExists by remember { mutableStateOf(false) }
             LaunchedEffect(userPrefs.profilePicturePath) {
                 if (userPrefs.profilePicturePath.isNotEmpty()) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    withContext(Dispatchers.IO) {
                         val exists = File(userPrefs.profilePicturePath).exists()
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {
                             profileImageExists = exists
                         }
                     }
@@ -222,8 +225,6 @@ fun ProfileScreen(
                 value = nameInput,
                 onValueChange = { 
                     nameInput = it 
-                    // Optional: real-time update if preferred, but user requested on done/confirm
-                    // viewModel.updateDisplayName(it) 
                 },
                 label = { Text("Display Name") },
                 modifier = Modifier.fillMaxWidth(),
@@ -337,10 +338,18 @@ fun ProfileScreen(
                 )
             }
 
+            SettingsSection(title = "About & Updates") {
+                SettingsActionItem(
+                    label = "Check for updates",
+                    value = "v${BuildConfig.VERSION_NAME}",
+                    onClick = onCheckForUpdates
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "App Version: 1.0.0",
+                text = "Wavify v${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
