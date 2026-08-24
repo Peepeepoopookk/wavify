@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
@@ -25,6 +26,7 @@ class TrackDownloadWorker(
     override suspend fun doWork(): Result {
         val trackId = inputData.getString(KEY_TRACK_ID).orEmpty()
         val driveFileId = inputData.getString(KEY_DRIVE_FILE_ID).orEmpty()
+        val albumArtUrl = inputData.getString(KEY_ALBUM_ART_URL)
         if (trackId.isBlank() || driveFileId.isBlank()) {
             return Result.failure()
         }
@@ -44,6 +46,7 @@ class TrackDownloadWorker(
             }
 
             val downloadedFile = downloadManager.downloadedFile(driveFileId)
+            val artworkFile = downloadManager.downloadAlbumArt(driveFileId, albumArtUrl)
             val fileSize = downloadedFile.length()
             if (!downloadedFile.exists() || fileSize <= 0L) {
                 return Result.retry()
@@ -53,20 +56,24 @@ class TrackDownloadWorker(
                 DownloadedTrackEntity(
                     driveFileId = driveFileId,
                     localFilePath = downloadedFile.absolutePath,
+                    albumArtLocalPath = artworkFile?.absolutePath,
                     downloadedAt = System.currentTimeMillis(),
-                    fileSizeBytes = fileSize
+                    fileSizeBytes = fileSize + (artworkFile?.length() ?: 0L)
                 )
             )
 
-            Result.success(
-                workDataOf(
-                    KEY_TRACK_ID to trackId,
-                    KEY_DRIVE_FILE_ID to driveFileId,
-                    KEY_LOCAL_FILE_PATH to downloadedFile.absolutePath,
-                    KEY_FILE_SIZE_BYTES to fileSize,
-                    KEY_PROGRESS to 100
-                )
-            )
+            val outputData = Data.Builder()
+                .putString(KEY_TRACK_ID, trackId)
+                .putString(KEY_DRIVE_FILE_ID, driveFileId)
+                .putString(KEY_LOCAL_FILE_PATH, downloadedFile.absolutePath)
+                .putLong(KEY_FILE_SIZE_BYTES, fileSize + (artworkFile?.length() ?: 0L))
+                .putInt(KEY_PROGRESS, 100)
+                .apply {
+                    artworkFile?.absolutePath?.let { putString(KEY_ALBUM_ART_LOCAL_PATH, it) }
+                }
+                .build()
+
+            Result.success(outputData)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -90,6 +97,8 @@ class TrackDownloadWorker(
         const val KEY_DRIVE_FILE_ID = "drive_file_id"
         const val KEY_PROGRESS = "progress"
         const val KEY_LOCAL_FILE_PATH = "local_file_path"
+        const val KEY_ALBUM_ART_URL = "album_art_url"
+        const val KEY_ALBUM_ART_LOCAL_PATH = "album_art_local_path"
         const val KEY_FILE_SIZE_BYTES = "file_size_bytes"
 
         private const val TRACK_TAG_PREFIX = "wavify-track-download-track-"
@@ -103,14 +112,17 @@ class TrackDownloadWorker(
             return tags.firstOrNull { it.startsWith(TRACK_TAG_PREFIX) }?.removePrefix(TRACK_TAG_PREFIX)
         }
 
-        fun buildRequest(trackId: String, driveFileId: String): OneTimeWorkRequest {
+        fun buildRequest(trackId: String, driveFileId: String, albumArtUrl: String?): OneTimeWorkRequest {
+            val inputData = Data.Builder()
+                .putString(KEY_TRACK_ID, trackId)
+                .putString(KEY_DRIVE_FILE_ID, driveFileId)
+                .apply {
+                    albumArtUrl?.takeIf { it.isNotBlank() }?.let { putString(KEY_ALBUM_ART_URL, it) }
+                }
+                .build()
+
             return OneTimeWorkRequestBuilder<TrackDownloadWorker>()
-                .setInputData(
-                    workDataOf(
-                        KEY_TRACK_ID to trackId,
-                        KEY_DRIVE_FILE_ID to driveFileId
-                    )
-                )
+                .setInputData(inputData)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)

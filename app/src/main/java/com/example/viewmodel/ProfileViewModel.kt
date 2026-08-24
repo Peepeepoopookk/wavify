@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.repository.UserPreferences
 import com.example.repository.UserPreferencesRepository
 import com.example.repository.clearApiCache
+import com.example.repository.clearImportedPlaylistCache
 import com.example.service.MusicCache
 import com.example.data.local.WavifyDatabase
 import com.example.download.DownloadManager
@@ -115,6 +116,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             val app = getApplication<Application>()
             MusicCache.clear(app)
             clearApiCache(app)
+            clearImportedPlaylistCache(app)
             app.imageLoader.memoryCache?.clear()
             app.imageLoader.diskCache?.clear()
         }

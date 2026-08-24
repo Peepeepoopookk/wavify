@@ -46,6 +46,17 @@ fun ArtistDetailScreen(
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
 
+    val handleTrackSelect = remember(tracks, onTrackSelect) {
+        { selectedTrack: Track -> onTrackSelect(selectedTrack, tracks) }
+    }
+    val handleArtistClick = remember(decodedName, onArtistClick) {
+        { tappedArtist: String ->
+            if (!tappedArtist.equals(decodedName, ignoreCase = true)) {
+                onArtistClick(tappedArtist)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,19 +93,16 @@ fun ArtistDetailScreen(
             }
 
             items(tracks, key = { it.id }) { track ->
+                val onDownload = remember(track.id) { { viewModel.downloadTrack(track.id) } }
                 TrackRow(
                     track = track,
                     isActive = currentTrack?.id == track.id,
                     isDownloading = downloadProgress.containsKey(track.id),
                     progress = downloadProgress[track.id] ?: 0f,
                     viewModel = viewModel,
-                    onTrackSelect = { onTrackSelect(track, tracks) },
-                    onDownloadClick = { viewModel.downloadTrack(track.id) },
-                    onArtistClick = { tappedArtist ->
-                        if (!tappedArtist.equals(decodedName, ignoreCase = true)) {
-                            onArtistClick(tappedArtist)
-                        }
-                    }
+                    onTrackSelect = handleTrackSelect,
+                    onDownloadClick = onDownload,
+                    onArtistClick = handleArtistClick
                 )
             }
         }

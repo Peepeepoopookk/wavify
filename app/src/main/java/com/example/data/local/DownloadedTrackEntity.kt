@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
 data class DownloadedTrackEntity(
     @PrimaryKey val driveFileId: String,
     val localFilePath: String,
+    val albumArtLocalPath: String?,
     val downloadedAt: Long,
     val fileSizeBytes: Long
 )

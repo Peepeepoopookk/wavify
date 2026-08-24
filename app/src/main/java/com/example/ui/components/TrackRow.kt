@@ -48,6 +48,8 @@ fun TrackRow(
     val imageShape = remember { RoundedCornerShape(12.dp) }
     val shadowColor = remember { Color.Black.copy(alpha = 0.08f) }
 
+    val haptic = com.example.ui.util.rememberAppHapticFeedback()
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -59,7 +61,10 @@ fun TrackRow(
                 interactionSource = interactionSource,
                 indication = androidx.compose.foundation.LocalIndication.current,
                 onClick = { onTrackSelect(track) },
-                onLongClick = { showMenu = true }
+                onLongClick = {
+                    haptic.heavyClick()
+                    showMenu = true
+                }
             )
     ) {
         Row(
@@ -100,7 +105,10 @@ fun TrackRow(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    IconButton(onClick = onDownloadClick) {
+                    IconButton(onClick = {
+                        haptic.tick()
+                        onDownloadClick()
+                    }) {
                         Icon(
                             if (track.isDownloaded) Icons.Default.CheckCircle else Icons.Default.Download,
                             null,

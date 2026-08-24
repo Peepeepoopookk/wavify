@@ -4,9 +4,15 @@ import android.os.Bundle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -18,6 +24,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -106,8 +114,58 @@ const val ROUTE_ARTIST_DETAIL = "artist_detail/{artistName}"
 const val ROUTE_PLAYLIST_DETAIL = "playlist_detail/{playlistId}/{isImported}"
 
 private const val ROOT_TRANSITION_MS = 80
-private const val SHEET_TRANSITION_MS = 220
-private const val OPENING_SPLASH_MIN_MS = 1100L
+
+private fun detailEnterTransition() = slideInHorizontally(
+    initialOffsetX = { fullWidth -> fullWidth },
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+) + fadeIn(
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+)
+
+private fun detailExitTransition() = slideOutHorizontally(
+    targetOffsetX = { fullWidth -> -fullWidth / 3 },
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+) + fadeOut(
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+)
+
+private fun detailPopEnterTransition() = slideInHorizontally(
+    initialOffsetX = { fullWidth -> -fullWidth / 3 },
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+) + fadeIn(
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+)
+
+private fun detailPopExitTransition() = slideOutHorizontally(
+    targetOffsetX = { fullWidth -> fullWidth },
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+) + fadeOut(
+    animationSpec = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+)
 
 private fun NavHostController.navigateTopLevel(route: String) {
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -128,12 +186,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             val mainViewModel: MainViewModel = viewModel()
             val profileViewModel: ProfileViewModel = viewModel()
             val equalizerViewModel: EqualizerViewModel = viewModel()
             val importViewModel: ImportViewModel = viewModel()
-            
+
             val currentTrack by mainViewModel.currentTrack.collectAsStateWithLifecycle()
             val userPrefs by profileViewModel.userPreferences.collectAsStateWithLifecycle()
             
@@ -163,6 +222,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MainAppScaffold(
     viewModel: MainViewModel,
@@ -176,45 +236,88 @@ fun MainAppScaffold(
     val currentDestination = navBackStackEntry?.destination?.route ?: "home"
 
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
-    val isInitialLibraryLoaded by viewModel.isInitialLibraryLoaded.collectAsStateWithLifecycle()
     var isNowPlayingExpanded by remember { mutableStateOf(false) }
-    var showOpeningSplash by remember { mutableStateOf(true) }
-    val openingSplashStartedAt = remember { System.currentTimeMillis() }
 
-    LaunchedEffect(isInitialLibraryLoaded) {
-        if (isInitialLibraryLoaded) {
-            val elapsed = System.currentTimeMillis() - openingSplashStartedAt
-            delay((OPENING_SPLASH_MIN_MS - elapsed).coerceAtLeast(0L))
-            showOpeningSplash = false
-        } else {
-            showOpeningSplash = true
+    val predictiveBackProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(isNowPlayingExpanded) {
+        if (isNowPlayingExpanded) {
+            predictiveBackProgress.snapTo(0f)
         }
     }
 
-    BackHandler(enabled = isNowPlayingExpanded) {
-        isNowPlayingExpanded = false
+    PredictiveBackHandler(enabled = isNowPlayingExpanded) { progressFlow ->
+        var isCommitted = false
+        try {
+            progressFlow.collect { backEvent ->
+                predictiveBackProgress.snapTo(backEvent.progress)
+            }
+            isCommitted = true
+            isNowPlayingExpanded = false
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                predictiveBackProgress.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                predictiveBackProgress.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+        } finally {
+            if (!isCommitted) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    predictiveBackProgress.snapTo(0f)
+                }
+            }
+        }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (!showOpeningSplash) {
+    SharedTransitionLayout {
+        Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                bottomBar = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                    // Mini player overlays directly on top of the navbar
-                    if (currentTrack != null) {
-                        MiniPlayer(
-                            viewModel = viewModel,
-                            onExpandClick = { isNowPlayingExpanded = true }
-                        )
-                    }
+                    modifier = Modifier.fillMaxSize(),
+                    bottomBar = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Mini player overlays directly on top of the navbar
+                            AnimatedVisibility(
+                                visible = currentTrack != null && !isNowPlayingExpanded,
+                                enter = fadeIn(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                ),
+                                exit = fadeOut(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                )
+                            ) {
+                                MiniPlayer(
+                                    viewModel = viewModel,
+                                    onExpandClick = { isNowPlayingExpanded = true },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedVisibility
+                                )
+                            }
 
-                    // Bottom navigation bar (with minimalist Apple Music label indicators)
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                        windowInsets = WindowInsets.navigationBars
-                    ) {
+                            // Bottom navigation bar (with minimalist Apple Music label indicators)
+                            NavigationBar(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 0.dp,
+                                windowInsets = WindowInsets.navigationBars
+                            ) {
                         NavigationBarItem(
                             selected = currentDestination == "home",
                             onClick = {
@@ -246,7 +349,6 @@ fun MainAppScaffold(
                                 indicatorColor = Color.Transparent
                             )
                         )
-
                         NavigationBarItem(
                             selected = currentDestination?.startsWith("library") == true,
                             onClick = {
@@ -259,7 +361,7 @@ fun MainAppScaffold(
                                 selectedTextColor = accentColor,
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = Color.Transparent // Pure minimalist indicator
+                                indicatorColor = Color.Transparent
                             )
                         )
 
@@ -289,7 +391,8 @@ fun MainAppScaffold(
                 startDestination = ROUTE_HOME,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .then(with(this@SharedTransitionLayout) { Modifier.skipToLookaheadSize() }),
                 enterTransition = {
                     fadeIn(animationSpec = tween(ROOT_TRANSITION_MS))
                 },
@@ -441,7 +544,11 @@ fun MainAppScaffold(
                 }
                 composable(
                     route = ROUTE_ARTIST_DETAIL,
-                    arguments = listOf(navArgument("artistName") { type = NavType.StringType })
+                    arguments = listOf(navArgument("artistName") { type = NavType.StringType }),
+                    enterTransition = { detailEnterTransition() },
+                    exitTransition = { detailExitTransition() },
+                    popEnterTransition = { detailPopEnterTransition() },
+                    popExitTransition = { detailPopExitTransition() }
                 ) { backStackEntry ->
                     val artistName = backStackEntry.arguments?.getString("artistName") ?: ""
                     ArtistDetailScreen(
@@ -460,7 +567,11 @@ fun MainAppScaffold(
                 }
                 composable(
                     route = "genre_detail/{genre}",
-                    arguments = listOf(androidx.navigation.navArgument("genre") { type = androidx.navigation.NavType.StringType })
+                    arguments = listOf(androidx.navigation.navArgument("genre") { type = androidx.navigation.NavType.StringType }),
+                    enterTransition = { detailEnterTransition() },
+                    exitTransition = { detailExitTransition() },
+                    popEnterTransition = { detailPopEnterTransition() },
+                    popExitTransition = { detailPopExitTransition() }
                 ) { backStackEntry ->
                     val genre = backStackEntry.arguments?.getString("genre") ?: ""
                     com.example.ui.screens.GenreDetailScreen(
@@ -478,7 +589,13 @@ fun MainAppScaffold(
                     )
                 }
 
-                composable("profile") {
+                composable(
+                    route = "profile",
+                    enterTransition = { detailEnterTransition() },
+                    exitTransition = { detailExitTransition() },
+                    popEnterTransition = { detailPopEnterTransition() },
+                    popExitTransition = { detailPopExitTransition() }
+                ) {
                     ProfileScreen(
                         viewModel = profileViewModel,
                         onBackClick = {
@@ -489,7 +606,13 @@ fun MainAppScaffold(
                         }
                     )
                 }
-                composable(ROUTE_EQUALIZER) {
+                composable(
+                    route = ROUTE_EQUALIZER,
+                    enterTransition = { detailEnterTransition() },
+                    exitTransition = { detailExitTransition() },
+                    popEnterTransition = { detailPopEnterTransition() },
+                    popExitTransition = { detailPopExitTransition() }
+                ) {
                     EqualizerScreen(
                         viewModel = equalizerViewModel,
                         onBackClick = {
@@ -502,7 +625,11 @@ fun MainAppScaffold(
                     arguments = listOf(
                         navArgument("playlistId") { type = NavType.StringType },
                         navArgument("isImported") { type = NavType.BoolType }
-                    )
+                    ),
+                    enterTransition = { detailEnterTransition() },
+                    exitTransition = { detailExitTransition() },
+                    popEnterTransition = { detailPopEnterTransition() },
+                    popExitTransition = { detailPopExitTransition() }
                 ) { backStackEntry ->
                     val playlistId = backStackEntry.arguments?.getString("playlistId") ?: ""
                     val isImported = backStackEntry.arguments?.getBoolean("isImported") ?: false
@@ -524,147 +651,55 @@ fun MainAppScaffold(
             }
             }
 
-            // Sliding sheet Now Playing Screen Overlay animation
+            // Shared Element Now Playing Screen Overlay animation
             AnimatedVisibility(
                 visible = isNowPlayingExpanded,
-                enter = slideInVertically(
-                    initialOffsetY = { height -> height },
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                ) + fadeIn(animationSpec = tween(SHEET_TRANSITION_MS)),
-                exit = slideOutVertically(
-                    targetOffsetY = { height -> height },
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                ) + fadeOut(animationSpec = tween(SHEET_TRANSITION_MS))
-            ) {
-                NowPlayingScreen(
-                    viewModel = viewModel,
-                    onDismiss = { isNowPlayingExpanded = false },
-                    onArtistClick = { artistName ->
-                        val encodedName = android.net.Uri.encode(artistName)
-                        navController.navigate("artist_detail/$encodedName")
-                    },
-                    accentColor = accentColor
-                )
-            }
-        } else {
-            OpeningMusicSplash(accentColor = accentColor)
-        }
-    }
-}
-
-@Composable
-private fun OpeningMusicSplash(accentColor: Color) {
-    val transition = rememberInfiniteTransition(label = "openingLogo")
-    val logoScale by transition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "logoScale"
-    )
-    val glowAlpha by transition.animateFloat(
-        initialValue = 0.14f,
-        targetValue = 0.34f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "logoGlow"
-    )
-    val barOne by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(620, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "barOne")
-    val barTwo by transition.animateFloat(0.55f, 1f, infiniteRepeatable(tween(760, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "barTwo")
-    val barThree by transition.animateFloat(0.25f, 0.9f, infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "barThree")
-    val barFour by transition.animateFloat(0.45f, 1f, infiniteRepeatable(tween(840, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "barFour")
-    val bars = listOf(barOne, barTwo, barThree, barFour)
-    val logoShape = remember { RoundedCornerShape(36.dp) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        accentColor.copy(alpha = 0.16f),
-                        MaterialTheme.colorScheme.background,
-                        Color.Black
+                enter = fadeIn(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ),
+                exit = fadeOut(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
                     )
                 )
-            )
-            .padding(horizontal = 32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(contentAlignment = Alignment.Center) {
+            ) {
+                val progress = predictiveBackProgress.value
+                val sheetScale = 1f - (progress * 0.10f)
+                val sheetCornerRadius = (progress * 32f).dp
+                val sheetTranslationY = (progress * 48f).dp
+                val sheetAlpha = 1f - (progress * 0.12f)
+                val sheetElevation = (progress * 16f).dp
+
                 Box(
                     modifier = Modifier
-                        .size(190.dp)
+                        .fillMaxSize()
                         .graphicsLayer {
-                            scaleX = logoScale
-                            scaleY = logoScale
+                            scaleX = sheetScale
+                            scaleY = sheetScale
+                            translationY = sheetTranslationY.toPx()
+                            alpha = sheetAlpha
+                            clip = progress > 0f
+                            shape = RoundedCornerShape(sheetCornerRadius)
+                            shadowElevation = sheetElevation.toPx()
                         }
-                        .background(accentColor.copy(alpha = glowAlpha), logoShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(154.dp)
-                        .clip(logoShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.24f),
-                            shape = logoShape
-                        ),
-                    contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_cropped_foreground),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(10.dp),
-                        contentScale = ContentScale.Fit
+                    NowPlayingScreen(
+                        viewModel = viewModel,
+                        onDismiss = { isNowPlayingExpanded = false },
+                        onArtistClick = { artistName ->
+                            val encodedName = android.net.Uri.encode(artistName)
+                            navController.navigate("artist_detail/$encodedName")
+                        },
+                        accentColor = accentColor,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this@AnimatedVisibility
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            Row(
-                modifier = Modifier.height(34.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                bars.forEach { heightScale ->
-                    Box(
-                        modifier = Modifier
-                            .width(7.dp)
-                            .fillMaxHeight(heightScale)
-                            .clip(RoundedCornerShape(50))
-                            .background(accentColor)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Wavify",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "Getting your music ready",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
         }
     }
 }

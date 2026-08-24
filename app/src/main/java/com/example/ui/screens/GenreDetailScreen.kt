@@ -48,6 +48,9 @@ fun GenreDetailScreen(
         allTracks.filter { normalizeGenreName(it.genre) == selectedGenre }
     }
     val headerArt = remember(tracks) { tracks.firstOrNull()?.albumArt }
+    val handleTrackSelect = remember(tracks, onTrackSelect) {
+        { selectedTrack: Track -> onTrackSelect(selectedTrack, tracks) }
+    }
 
     Scaffold(
         topBar = {
@@ -149,14 +152,15 @@ fun GenreDetailScreen(
                 }
                 
                 items(tracks, key = { it.id }) { track ->
+                    val onDownload = remember(track.id) { { viewModel.downloadTrack(track.id) } }
                     TrackRow(
                         track = track,
                         isActive = currentTrack?.id == track.id,
                         isDownloading = downloadProgress.containsKey(track.id),
                         progress = downloadProgress[track.id] ?: 0f,
                         viewModel = viewModel,
-                        onTrackSelect = { onTrackSelect(track, tracks) },
-                        onDownloadClick = { viewModel.downloadTrack(track.id) },
+                        onTrackSelect = handleTrackSelect,
+                        onDownloadClick = onDownload,
                         onArtistClick = onArtistClick
                     )
                 }

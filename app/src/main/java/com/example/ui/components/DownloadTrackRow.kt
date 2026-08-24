@@ -48,6 +48,8 @@ fun DownloadTrackRow(
         offsetPositionX = targetOffset.coerceIn(deleteButtonPx, 0f)
     }
 
+    val haptic = com.example.ui.util.rememberAppHapticFeedback()
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -61,6 +63,7 @@ fun DownloadTrackRow(
                 .fillMaxHeight()
                 .align(Alignment.CenterEnd)
                 .clickable {
+                    haptic.heavyClick()
                     offsetPositionX = 0f
                     onDeleteClick()
                 },

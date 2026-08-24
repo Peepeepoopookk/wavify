@@ -35,6 +35,10 @@ private fun String?.usableAlbumArt(): String? {
     }
 }
 
+private fun String.isGeneratedFallbackAlbumArt(): Boolean {
+    return startsWith("android.resource://") && contains("/drawable/fallback_album_art_")
+}
+
 @Composable
 fun AlbumArtImage(
     albumArt: String?,
@@ -46,24 +50,30 @@ fun AlbumArtImage(
 ) {
     val context = LocalContext.current
     val fallback = remember(fallbackSeed) { fallbackDrawableFor(fallbackSeed) }
-    val data = remember(albumArt, fallbackSeed) {
-        albumArt.usableAlbumArt() ?: fallbackAlbumArtFor(fallbackSeed)
+    val requestedAlbumArt = remember(albumArt) { albumArt.usableAlbumArt() }
+    val hasRealAlbumArt = remember(requestedAlbumArt) {
+        requestedAlbumArt != null && !requestedAlbumArt.isGeneratedFallbackAlbumArt()
+    }
+    val data = remember(requestedAlbumArt, hasRealAlbumArt, fallbackSeed) {
+        if (hasRealAlbumArt) requestedAlbumArt else fallbackAlbumArtFor(fallbackSeed)
     }
     val imageRequest = remember(context, data, requestSize) {
         ImageRequest.Builder(context)
             .data(data)
             .size(requestSize, requestSize)
-            .crossfade(true)
+            .crossfade(false)
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .build()
     }
+    val fallbackPainter = painterResource(fallback)
+    val missingArtPainter = if (hasRealAlbumArt) null else fallbackPainter
 
     AsyncImage(
         model = imageRequest,
-        placeholder = painterResource(fallback),
-        error = painterResource(fallback),
-        fallback = painterResource(fallback),
+        placeholder = missingArtPainter,
+        error = missingArtPainter,
+        fallback = missingArtPainter,
         contentDescription = contentDescription,
         modifier = modifier,
         contentScale = contentScale

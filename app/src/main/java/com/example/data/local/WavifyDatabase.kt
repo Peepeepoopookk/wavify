@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DownloadedTrackEntity::class,
         CachedTrackEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class WavifyDatabase : RoomDatabase() {
@@ -86,13 +86,19 @@ abstract class WavifyDatabase : RoomDatabase() {
                         db.execSQL("CREATE INDEX IF NOT EXISTS `index_cached_tracks_updatedAt` ON `cached_tracks` (`updatedAt`)")
                     }
                 }
+
+                val MIGRATION_4_5 = object : Migration(4, 5) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE `downloaded_tracks` ADD COLUMN `albumArtLocalPath` TEXT")
+                    }
+                }
             
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     WavifyDatabase::class.java,
                     "wavify_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 INSTANCE = instance
                 instance

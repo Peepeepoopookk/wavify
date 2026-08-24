@@ -25,6 +25,7 @@ import com.example.BuildConfig
 import com.example.model.Track
 import com.example.model.Artist
 import com.example.model.ImportedPlaylist
+import com.example.model.fallbackAlbumArtFor
 import com.example.repository.DriveRepository
 import com.example.repository.ImportRepository
 import com.example.repository.MusicRepositoryImpl
@@ -39,12 +40,15 @@ import com.example.data.local.LocalPlaylistTrack
 import com.example.data.local.RecentlyPlayedTrack
 import com.example.data.local.WavifyDatabase
 import com.example.data.local.CachedTrackEntity
+import com.example.data.local.DownloadedTrackEntity
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,11 +56,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import com.example.download.DownloadManager
 import com.example.download.TrackDownloadWorker
 
@@ -64,11 +72,17 @@ enum class LayoutType {
     GRID, ROW
 }
 
+enum class HomeSectionKind {
+    GENRE, LANGUAGE, COLLECTION
+}
+
 data class HomeSectionData(
     val title: String,
     val genre: String,
     val tracks: List<Track>,
-    val layoutType: LayoutType
+    val layoutType: LayoutType,
+    val kind: HomeSectionKind = HomeSectionKind.GENRE,
+    val filterValue: String = genre
 )
 
 data class QueueItem(
@@ -98,6 +112,7 @@ fun displayGenreName(genre: String): String {
     }
 }
 
+@OptIn(FlowPreview::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val INITIAL_UPCOMING_QUEUE_SIZE = 20
@@ -226,9 +241,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var hasUserInitiatedPlayback = false
 
     // List of tracks after applying search and filters
+    @OptIn(FlowPreview::class)
     val filteredTracks: StateFlow<List<Track>> = combine(
         _tracks,
-        _searchQuery,
+        _searchQuery.debounce(150L),
         _activeLanguageFilter,
         _offlineModeEnabled
     ) { trackList, query, lang, offlineMode ->
@@ -242,9 +258,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // List of downloaded tracks
+    @OptIn(FlowPreview::class)
     val downloadedTracks: StateFlow<List<Track>> = combine(
         _tracks,
-        _downloadSearchQuery
+        _downloadSearchQuery.debounce(150L)
     ) { list, query ->
         list.filter { it.isDownloaded }.filter { track ->
             query.isEmpty() ||
@@ -279,9 +296,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var browserFuture: ListenableFuture<MediaController>? = null
     private val player: Player? get() = if (browserFuture?.isDone == true) browserFuture?.get() else null
     private var playbackTickerJob: Job? = null
+    private var lastSeekTimestamp = 0L
+    private var pendingSeekPosition: Long? = null
     private var sleepTimerJob: Job? = null
     private var audioPrefetchJob: Job? = null
     private var lastPrefetchedTrackId: String? = null
+    private val hydratingDownloadedArtworkIds = ConcurrentHashMap.newKeySet<String>()
+    private val favoriteWriteRequests = MutableSharedFlow<Set<String>>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
     private fun List<Track>.visibleForOfflineMode(offlineMode: Boolean): List<Track> {
         return if (offlineMode) filter { it.isDownloaded } else this
@@ -291,11 +316,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         observeCachedTracks()
         observeDownloadWork()
 
+        // Load persisted favorites on startup and serialize writes to DataStore
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val initialFavorites = userPrefsRepository.favoriteTrackIdsFlow.first()
+                withContext(Dispatchers.Main) {
+                    _favoriteTrackIds.value = initialFavorites
+                }
+            } catch (e: Exception) {
+                Log.e("WavifyViewModel", "Failed to load initial favorites", e)
+            }
+
+            favoriteWriteRequests.collectLatest { favoritesToPersist ->
+                try {
+                    userPrefsRepository.updateFavoriteTrackIds(favoritesToPersist)
+                } catch (e: Exception) {
+                    Log.e("WavifyViewModel", "Failed to persist favorites to DataStore, rolling back", e)
+                    val currentDiskState = userPrefsRepository.favoriteTrackIdsFlow.first()
+                    withContext(Dispatchers.Main) {
+                        _favoriteTrackIds.value = currentDiskState
+                    }
+                }
+            }
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             val downloadedTracks = downloadedTrackDao.getAllSync()
             downloadedTracks.forEach { track ->
                 val file = File(track.localFilePath)
                 if (!file.exists()) {
+                    track.albumArtLocalPath?.let { File(it).delete() }
                     downloadedTrackDao.delete(track.driveFileId)
                 }
             }
@@ -351,10 +401,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val controller = browserFuture?.get() ?: return@addListener
                 controller.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        Log.d("WavifySeek", "Player.onIsPlayingChanged: isPlaying=$isPlaying")
                         _isPlaying.value = isPlaying
                     }
 
                     override fun onPlaybackStateChanged(state: Int) {
+                        val stateName = when (state) {
+                            Player.STATE_IDLE -> "IDLE"
+                            Player.STATE_BUFFERING -> "BUFFERING"
+                            Player.STATE_READY -> "READY"
+                            Player.STATE_ENDED -> "ENDED"
+                            else -> "UNKNOWN($state)"
+                        }
+                        Log.d("WavifySeek", "Player.onPlaybackStateChanged: state=$stateName")
                         _isBuffering.value = state == Player.STATE_BUFFERING
                         
                         if (state == Player.STATE_READY) {
@@ -366,6 +425,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        val reasonName = when (reason) {
+                            Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
+                            Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "SEEK"
+                            Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> "PLAYLIST_CHANGED"
+                            Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "REPEAT"
+                            else -> "UNKNOWN($reason)"
+                        }
+                        Log.d("WavifySeek", "Player.onMediaItemTransition: item=${mediaItem?.mediaId}, reason=$reasonName")
                         mediaItem?.let { item ->
                             val track = _tracks.value.find { it.id == item.mediaId }
                             if (track != null) {
@@ -384,6 +451,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                                 _playbackPosition.value = 0L
                                 _playbackDuration.value = 0L
+                                pendingSeekPosition = null
+                                lastSeekTimestamp = 0L
                                 syncPlaybackQueueState()
                                 appendMoreQueueItemsIfNeeded(controller)
                                 // Save to history
@@ -393,6 +462,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    override fun onPositionDiscontinuity(
+                        oldPosition: Player.PositionInfo,
+                        newPosition: Player.PositionInfo,
+                        reason: Int
+                    ) {
+                        Log.d(
+                            "WavifySeek",
+                            "Player.onPositionDiscontinuity: reason=$reason (isSeek=${reason == Player.DISCONTINUITY_REASON_SEEK}), oldPos=${oldPosition.positionMs}, newPos=${newPosition.positionMs}, pendingSeekPosition=$pendingSeekPosition"
+                        )
+                        if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                            pendingSeekPosition = null
+                            _playbackPosition.value = newPosition.positionMs
                         }
                     }
 
@@ -419,13 +503,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val downloadedByDriveFileId = downloadedTracks.associateBy { it.driveFileId }
                 val allTracks = cachedTracks.map { cachedTrack ->
                     val download = downloadedByDriveFileId[cachedTrack.driveFileId]
+                    if (download != null && !offlineMode) {
+                        ensureDownloadedArtwork(cachedTrack, download)
+                    }
+                    val downloadedAlbumArt = download?.let {
+                        localAlbumArtUri(it.albumArtLocalPath)
+                            ?: localAlbumArtUri(downloadManager.artworkFile(it.driveFileId).absolutePath)
+                            ?: fallbackAlbumArtFor(cachedTrack.driveFileId)
+                    }
                     cachedTrack.toTrack(
                         isDownloaded = download != null,
-                        localFilePath = download?.localFilePath
+                        localFilePath = download?.localFilePath,
+                        albumArtOverride = downloadedAlbumArt
                     )
                 }
                 allTracks to allTracks.visibleForOfflineMode(offlineMode)
-            }.collectLatest { (allTracks, visibleTracks) ->
+            }
+            .flowOn(Dispatchers.IO)
+            .collectLatest { (allTracks, visibleTracks) ->
                 _tracks.value = allTracks
                 generateHomeSections(visibleTracks)
                 if (allTracks.isNotEmpty()) {
@@ -435,43 +530,133 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun generateHomeSections(tracks: List<Track>) {
-        if (tracks.isEmpty()) {
-            _homeSections.value = emptyList()
-            return
+    private fun ensureDownloadedArtwork(cachedTrack: CachedTrackEntity, download: DownloadedTrackEntity) {
+        if (localAlbumArtUri(download.albumArtLocalPath) != null) return
+        if (localAlbumArtUri(downloadManager.artworkFile(download.driveFileId).absolutePath) != null) return
+        if (!hydratingDownloadedArtworkIds.add(download.driveFileId)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val artworkFile = downloadManager.downloadAlbumArt(download.driveFileId, cachedTrack.albumArt)
+                    ?: return@launch
+                val audioSize = File(download.localFilePath).takeIf { it.exists() }?.length() ?: 0L
+                downloadedTrackDao.insert(
+                    download.copy(
+                        albumArtLocalPath = artworkFile.absolutePath,
+                        fileSizeBytes = audioSize + artworkFile.length()
+                    )
+                )
+            } finally {
+                hydratingDownloadedArtworkIds.remove(download.driveFileId)
+            }
+        }
+    }
+
+    private suspend fun generateHomeSections(tracks: List<Track>) {
+        _homeSections.value = withContext(Dispatchers.Default) {
+            buildHomeSections(tracks)
+        }
+    }
+
+    private fun buildHomeSections(tracks: List<Track>): List<HomeSectionData> {
+        if (tracks.isEmpty()) return emptyList()
+
+        val sectionSorter = compareByDescending<Track> { it.addedAt ?: it.updatedAt ?: it.timestamp ?: "" }
+            .thenBy { it.title.lowercase() }
+            .thenBy { it.artist.lowercase() }
+            .thenBy { it.id }
+
+        fun cleanedGroupName(value: String): String {
+            return displayGenreName(value).takeIf { it.isNotBlank() } ?: "Mixed"
         }
 
-        val genreGroups = tracks
+        fun sortedPreview(groupTracks: List<Track>): List<Track> {
+            return groupTracks.sortedWith(sectionSorter).take(10)
+        }
+
+        val sections = mutableListOf<HomeSectionData>()
+
+        sortedPreview(tracks).takeIf { it.size >= 4 }?.let { freshTracks ->
+            sections += HomeSectionData(
+                title = "Fresh on Wavify",
+                genre = "all",
+                tracks = freshTracks,
+                layoutType = LayoutType.GRID,
+                kind = HomeSectionKind.COLLECTION,
+                filterValue = "songs"
+            )
+        }
+
+        val importedTracks = tracks
+            .filter { track ->
+                track.source.contains("spotify", ignoreCase = true) ||
+                        track.source.contains("import", ignoreCase = true) ||
+                        !track.requestedBy.isNullOrBlank()
+            }
+            .let(::sortedPreview)
+        if (importedTracks.size >= 4) {
+            sections += HomeSectionData(
+                title = "From Your Imports",
+                genre = "imported",
+                tracks = importedTracks,
+                layoutType = LayoutType.ROW,
+                kind = HomeSectionKind.COLLECTION,
+                filterValue = "songs"
+            )
+        }
+
+        val genreSections = tracks
             .groupBy { normalizeGenreName(it.genre) }
-            .filterKeys { it.isNotBlank() && it != "unknown" }
+            .filterKeys { it.isNotBlank() && it != "unknown" && it != "mixed" }
             .toList()
             .sortedWith(
                 compareByDescending<Pair<String, List<Track>>> { (_, genreTracks) -> genreTracks.size }
-                    .thenBy { (genreKey, _) -> displayGenreName(genreKey) }
+                    .thenBy { (genreKey, _) -> cleanedGroupName(genreKey) }
+            )
+            .take(8)
+            .mapIndexedNotNull { index, (genreKey, genreTracksForKey) ->
+                val genre = cleanedGroupName(genreKey)
+                val genreTracks = sortedPreview(genreTracksForKey)
+                if (genreTracks.size < 2) return@mapIndexedNotNull null
+                val titles = listOf("Trending in $genre", "Best of $genre", "$genre Hits", "Explore $genre")
+                HomeSectionData(
+                    title = titles[index % titles.size],
+                    genre = genre,
+                    tracks = genreTracks,
+                    layoutType = if (index % 2 == 0) LayoutType.ROW else LayoutType.GRID,
+                    kind = HomeSectionKind.GENRE,
+                    filterValue = genre
+                )
+            }
+
+        val languageSections = tracks
+            .groupBy { normalizeGenreName(it.language) }
+            .filterKeys { it.isNotBlank() && it != "unknown" && it != "all" }
+            .toList()
+            .sortedWith(
+                compareByDescending<Pair<String, List<Track>>> { (_, languageTracks) -> languageTracks.size }
+                    .thenBy { (languageKey, _) -> cleanedGroupName(languageKey) }
             )
             .take(6)
-
-        val newSections = genreGroups.mapIndexed { index, (genreKey, genreTracksForKey) ->
-            val genre = displayGenreName(genreKey)
-            val genreTracks = genreTracksForKey
-                .sortedWith(
-                    compareByDescending<Track> { it.addedAt ?: it.updatedAt ?: it.timestamp ?: "" }
-                        .thenBy { it.title.lowercase() }
-                        .thenBy { it.artist.lowercase() }
-                        .thenBy { it.id }
+            .mapIndexedNotNull { index, (languageKey, languageTracksForKey) ->
+                val language = cleanedGroupName(languageKey)
+                val languageTracks = sortedPreview(languageTracksForKey)
+                if (languageTracks.size < 2) return@mapIndexedNotNull null
+                val titles = listOf("$language Mix", "Fresh $language Songs", "$language Favorites")
+                HomeSectionData(
+                    title = titles[index % titles.size],
+                    genre = language,
+                    tracks = languageTracks,
+                    layoutType = if (index % 2 == 0) LayoutType.GRID else LayoutType.ROW,
+                    kind = HomeSectionKind.LANGUAGE,
+                    filterValue = language
                 )
-                .take(12)
-            val layoutType = if (index % 2 == 0) LayoutType.ROW else LayoutType.GRID
-            val titles = listOf("Trending in $genre", "Best of $genre", "$genre Hits", "Explore $genre")
-            HomeSectionData(
-                title = titles[index % titles.size],
-                genre = genre,
-                tracks = genreTracks,
-                layoutType = layoutType
-            )
-        }.filter { it.tracks.isNotEmpty() }
-        
-        _homeSections.value = newSections
+            }
+
+        sections += genreSections
+        sections += languageSections
+
+        return sections.distinctBy { "${it.kind}-${it.filterValue.lowercase()}-${it.title}" }.take(16)
     }
 
     fun loadTracks() {
@@ -506,12 +691,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _importedPlaylists.value = emptyList()
                 return@launch
             }
+            val cachedDetails = withContext(Dispatchers.IO) {
+                importRepository.getCachedImportedPlaylistDetails()
+            }
+            val cachedPlaylists = withContext(Dispatchers.IO) {
+                importRepository.getCachedImportedPlaylists()
+            }
+            val cachedVisiblePlaylists = mergeImportedPlaylistsWithCachedDetails(cachedPlaylists, cachedDetails)
+            if (cachedVisiblePlaylists.isNotEmpty()) {
+                _importedPlaylists.value = cachedVisiblePlaylists
+            }
+
             val deviceId = userPrefsRepository.ensureDeviceId()
             importRepository.getPlaylists(deviceId)
                 .onSuccess { playlists ->
-                    _importedPlaylists.value = playlists
-                        .filter { it.hasAnyTracks || it.total_tracks > 0 || it.track_ids.isNotEmpty() || it.tracks.isNotEmpty() }
-                        .map { playlist -> _playlistDetailsCache.get(playlist.id) ?: playlist }
+                    val visiblePlaylists = playlists
+                        .filter { it.id.isNotBlank() && it.name.isNotBlank() && it.hasAnyTracks }
+                        .map { playlist -> _playlistDetailsCache.get(playlist.id) ?: cachedDetails[playlist.id] ?: playlist }
+                    _importedPlaylists.value = visiblePlaylists
+                    viewModelScope.launch(Dispatchers.IO) {
+                        importRepository.cacheImportedPlaylists(visiblePlaylists)
+                    }
+                    hydrateImportedPlaylistDetails(visiblePlaylists)
                 }
                 .onFailure { e ->
                     Log.e("WavifyViewModel", "Failed to load playlists", e)
@@ -549,17 +750,92 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playlistTracksCache = LruCache<String, List<Track>>(50)
     private val _playlistDetailsCache = LruCache<String, ImportedPlaylist>(50)
+    private val hydratingImportedPlaylistIds = mutableSetOf<String>()
 
-    private fun cacheImportedPlaylistDetails(playlist: ImportedPlaylist) {
+    private fun mergeImportedPlaylistsWithCachedDetails(
+        playlists: List<ImportedPlaylist>,
+        cachedDetails: Map<String, ImportedPlaylist>
+    ): List<ImportedPlaylist> {
+        cachedDetails.values.forEach { cachedPlaylist ->
+            if (cachedPlaylist.id.isNotBlank() && cachedPlaylist.hasAnyTracks) {
+                _playlistDetailsCache.put(cachedPlaylist.id, cachedPlaylist)
+                _playlistTracksCache.put(cachedPlaylist.id, tracksForImportedPlaylist(cachedPlaylist))
+            }
+        }
+
+        return playlists
+            .filter { it.id.isNotBlank() && it.name.isNotBlank() && it.hasAnyTracks }
+            .map { playlist -> _playlistDetailsCache.get(playlist.id) ?: cachedDetails[playlist.id] ?: playlist }
+    }
+
+    private fun tracksForImportedPlaylist(playlist: ImportedPlaylist): List<Track> {
+        val detailedTracks = playlist.tracks.map { it.toTrack() }
+        if (detailedTracks.isNotEmpty()) {
+            return detailedTracks
+        }
+
+        if (playlist.track_ids.isEmpty()) {
+            return emptyList()
+        }
+
+        val knownTracks = buildMap {
+            _tracks.value.forEach { track ->
+                if (track.driveFileId.isNotBlank()) put(track.driveFileId, track)
+                if (track.id.isNotBlank()) put(track.id, track)
+            }
+        }
+        return playlist.track_ids.mapNotNull { knownTracks[it] }
+    }
+
+    private fun hydrateImportedPlaylistDetails(playlists: List<ImportedPlaylist>) {
+        if (_offlineModeEnabled.value) return
+
+        val targets = playlists.filter { playlist ->
+            val cached = _playlistDetailsCache.get(playlist.id)
+            playlist.id.isNotBlank() &&
+                    playlist.hasAnyTracks &&
+                    playlist.tracks.isEmpty() &&
+                    (cached == null || cached.tracks.isEmpty()) &&
+                    hydratingImportedPlaylistIds.add(playlist.id)
+        }
+
+        if (targets.isEmpty()) return
+
+        viewModelScope.launch {
+            targets.forEach { playlist ->
+                try {
+                    importRepository.getPlaylistDetails(playlist.id)
+                        .onSuccess { fullPlaylist ->
+                            if (fullPlaylist.id.isNotBlank() && fullPlaylist.name.isNotBlank() && fullPlaylist.hasAnyTracks) {
+                                cacheImportedPlaylistDetails(fullPlaylist)
+                            }
+                        }
+                        .onFailure { error ->
+                            Log.w("WavifyViewModel", "Failed to hydrate imported playlist ${playlist.id}", error)
+                        }
+                } finally {
+                    hydratingImportedPlaylistIds.remove(playlist.id)
+                }
+            }
+        }
+    }
+
+    private fun cacheImportedPlaylistDetails(playlist: ImportedPlaylist, persist: Boolean = true) {
+        val resolvedTracks = tracksForImportedPlaylist(playlist)
         _playlistDetailsCache.put(playlist.id, playlist)
-        _playlistTracksCache.put(playlist.id, playlist.tracks.map { it.toTrack() })
+        _playlistTracksCache.put(playlist.id, resolvedTracks)
+        if (persist) {
+            viewModelScope.launch(Dispatchers.IO) {
+                importRepository.cacheImportedPlaylistDetail(playlist)
+            }
+        }
 
         val currentPlaylists = _importedPlaylists.value.toMutableList()
         val index = currentPlaylists.indexOfFirst { it.id == playlist.id }
         if (index != -1) {
             currentPlaylists[index] = playlist
             _importedPlaylists.value = currentPlaylists
-        } else if (playlist.hasAnyTracks) {
+        } else if (playlist.id.isNotBlank() && playlist.name.isNotBlank() && playlist.hasAnyTracks) {
             _importedPlaylists.value = currentPlaylists + playlist
         }
     }
@@ -567,15 +843,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getImportedPlaylistDetails(playlistId: String): Flow<ImportedPlaylistDetailState> {
         return flow {
             val cachedPlaylist = _playlistDetailsCache.get(playlistId)
-            if (cachedPlaylist != null) {
+            val cachedTracks = _playlistTracksCache.get(playlistId).orEmpty()
+            if (cachedPlaylist != null && (cachedTracks.isNotEmpty() || !cachedPlaylist.hasAnyTracks)) {
                 emit(
                     ImportedPlaylistDetailState(
                         isLoading = false,
                         playlist = cachedPlaylist,
-                        tracks = _playlistTracksCache.get(playlistId).orEmpty()
+                        tracks = cachedTracks
                     )
                 )
                 return@flow
+            }
+            val persistedPlaylist = withContext(Dispatchers.IO) {
+                importRepository.getCachedImportedPlaylistDetails()[playlistId]
+            }
+            if (persistedPlaylist != null) {
+                cacheImportedPlaylistDetails(persistedPlaylist, persist = false)
+                val persistedTracks = _playlistTracksCache.get(playlistId).orEmpty()
+                if (persistedTracks.isNotEmpty() || !persistedPlaylist.hasAnyTracks) {
+                    emit(
+                        ImportedPlaylistDetailState(
+                            isLoading = false,
+                            playlist = persistedPlaylist,
+                            tracks = persistedTracks
+                        )
+                    )
+                    return@flow
+                }
             }
 
             val lightweightPlaylist = _importedPlaylists.value.find { it.id == playlistId }
@@ -620,7 +914,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getImportedPlaylistTracks(playlistId: String): Flow<List<Track>> {
         return flow {
             val cached = _playlistTracksCache.get(playlistId)
-            if (cached != null) {
+            if (!cached.isNullOrEmpty()) {
                 emit(cached)
                 return@flow
             }
@@ -777,7 +1071,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun Track.toMediaItem(): MediaItem {
-        val streamUrl = "${BuildConfig.WAVIFY_PROXY_BASE_URL}/stream/$driveFileId"
+        val localAudioUri = localFilePath
+            ?.takeIf { isDownloaded && it.isNotBlank() }
+            ?.let { File(it) }
+            ?.takeIf { it.exists() && it.length() > 0L }
+            ?.let { Uri.fromFile(it).toString() }
+        val remoteStreamUrl = this.streamUrl.takeIf { it.isNotBlank() }
+            ?: "${BuildConfig.WAVIFY_PROXY_BASE_URL}/stream/$driveFileId"
+        val playbackUri = localAudioUri ?: remoteStreamUrl
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artist)
@@ -786,9 +1087,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         return MediaItem.Builder()
             .setMediaId(id)
-            .setUri(streamUrl)
+            .setUri(playbackUri)
             .setMediaMetadata(metadata)
             .build()
+    }
+
+    private fun localAlbumArtUri(path: String?): String? {
+        val file = path?.takeIf { it.isNotBlank() }?.let(::File) ?: return null
+        return file.takeIf { it.exists() && it.length() > 0L }?.let { Uri.fromFile(it).toString() }
     }
 
     private fun buildNaturalUpcoming(limit: Int = INITIAL_UPCOMING_QUEUE_SIZE): List<Track> {
@@ -1028,8 +1334,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun seekTo(positionMs: Long) {
-        val safePosition = positionMs.coerceIn(0L, _playbackDuration.value)
+        val maxDuration = _playbackDuration.value.takeIf { it > 0L } ?: Long.MAX_VALUE
+        val safePosition = positionMs.coerceIn(0L, maxDuration)
+        Log.d("WavifySeek", "ViewModel.seekTo: positionMs=$positionMs -> safePosition=$safePosition, currentPos=${_playbackPosition.value}, duration=${_playbackDuration.value}, player=$player")
         _playbackPosition.value = safePosition
+        pendingSeekPosition = safePosition
+        lastSeekTimestamp = System.currentTimeMillis()
         player?.seekTo(safePosition)
     }
 
@@ -1114,7 +1424,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             current.add(trackId)
         }
-        _favoriteTrackIds.value = current
+        val next = current.toSet()
+        _favoriteTrackIds.value = next
+        favoriteWriteRequests.tryEmit(next)
     }
 
     private fun observeDownloadWork() {
@@ -1135,7 +1447,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 markTrackDownloaded(
                                     trackId = workInfo.outputData.getString(TrackDownloadWorker.KEY_TRACK_ID) ?: trackId,
                                     driveFileId = workInfo.outputData.getString(TrackDownloadWorker.KEY_DRIVE_FILE_ID),
-                                    localFilePath = workInfo.outputData.getString(TrackDownloadWorker.KEY_LOCAL_FILE_PATH)
+                                    localFilePath = workInfo.outputData.getString(TrackDownloadWorker.KEY_LOCAL_FILE_PATH),
+                                    albumArtLocalPath = workInfo.outputData.getString(TrackDownloadWorker.KEY_ALBUM_ART_LOCAL_PATH)
                                 )
                                 workManager.pruneWork()
                             }
@@ -1154,14 +1467,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun markTrackDownloaded(
         trackId: String,
         driveFileId: String?,
-        localFilePath: String?
+        localFilePath: String?,
+        albumArtLocalPath: String?
     ) {
         val resolvedDriveFileId = driveFileId?.takeIf { it.isNotBlank() } ?: return
         val resolvedPath = localFilePath?.takeIf { it.isNotBlank() }
             ?: downloadManager.downloadedFile(resolvedDriveFileId).absolutePath
+        val resolvedAlbumArt = localAlbumArtUri(albumArtLocalPath)
+            ?: localAlbumArtUri(downloadManager.artworkFile(resolvedDriveFileId).absolutePath)
+            ?: fallbackAlbumArtFor(resolvedDriveFileId)
         _tracks.value = _tracks.value.map { track ->
             if (track.id == trackId || track.driveFileId == resolvedDriveFileId) {
-                track.copy(isDownloaded = true, localFilePath = resolvedPath)
+                track.copy(isDownloaded = true, localFilePath = resolvedPath, albumArt = resolvedAlbumArt, album_art = resolvedAlbumArt)
             } else {
                 track
             }
@@ -1175,12 +1492,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (target.isDownloaded) return
         val driveFileId = target.driveFileId.takeIf { it.isNotBlank() } ?: return
 
-        _downloadProgress.value = _downloadProgress.value + (trackId to 0f)
-        workManager.enqueueUniqueWork(
-            TrackDownloadWorker.uniqueWorkName(driveFileId),
-            ExistingWorkPolicy.KEEP,
-            TrackDownloadWorker.buildRequest(trackId, driveFileId)
-        )
+        _downloadProgress.value = _downloadProgress.value + (trackId to 0.01f)
+        try {
+            workManager.enqueueUniqueWork(
+                TrackDownloadWorker.uniqueWorkName(driveFileId),
+                ExistingWorkPolicy.KEEP,
+                TrackDownloadWorker.buildRequest(trackId, driveFileId, target.albumArt)
+            )
+        } catch (e: Exception) {
+            Log.e("WavifyViewModel", "Failed to enqueue download for trackId=$trackId, rolling back", e)
+            _downloadProgress.value = _downloadProgress.value - trackId
+        }
     }
 
     fun deleteDownloadedTrack(trackId: String) {
@@ -1190,17 +1512,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 workManager.cancelUniqueWork(TrackDownloadWorker.uniqueWorkName(driveFileId))
                 _downloadProgress.value = _downloadProgress.value - trackId
                 downloadManager.deleteTrack(driveFileId)
+                val originalTrack = withContext(Dispatchers.IO) {
+                    cachedTrackDao.getByDriveFileId(driveFileId)?.toTrack()
+                }
                 withContext(Dispatchers.IO) {
                     downloadedTrackDao.delete(driveFileId)
                 }
-            }
-            
-            repository.deleteDownload(trackId)
-            _tracks.value = _tracks.value.map {
-                if (it.id == trackId || it.driveFileId == target?.driveFileId) {
-                    it.copy(isDownloaded = false, localFilePath = null)
-                } else {
-                    it
+                repository.deleteDownload(trackId)
+                _tracks.value = _tracks.value.map { track ->
+                    if (track.id == trackId || track.driveFileId == driveFileId) {
+                        originalTrack?.copy(isDownloaded = false, localFilePath = null)
+                            ?: track.copy(
+                                isDownloaded = false,
+                                localFilePath = null,
+                                albumArt = fallbackAlbumArtFor(driveFileId),
+                                album_art = fallbackAlbumArtFor(driveFileId)
+                            )
+                    } else {
+                        track
+                    }
                 }
             }
         }
@@ -1239,8 +1569,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     @OptIn(UnstableApi::class)
     private fun updatePlaybackState() {
         player?.let { p ->
-            // Always update position and duration even when paused for UI sync
-            _playbackPosition.value = p.currentPosition
+            val playerPos = p.currentPosition
+            val pendingSeek = pendingSeekPosition
+            val now = System.currentTimeMillis()
+
+            var clearedPending = false
+            if (pendingSeek != null) {
+                val delta = kotlin.math.abs(playerPos - pendingSeek)
+                val elapsed = now - lastSeekTimestamp
+                // If player position has caught up to seek target (within 500ms) or if 3s safety timeout elapsed
+                if (delta < 500L || elapsed > 3000L) {
+                    pendingSeekPosition = null
+                    clearedPending = true
+                    _playbackPosition.value = playerPos
+                }
+            } else {
+                _playbackPosition.value = playerPos
+            }
+
+            Log.d(
+                "WavifySeek",
+                "updatePlaybackState tick: playerPos=$playerPos, pendingSeek=$pendingSeek, clearedPending=$clearedPending, emittedPlaybackPos=${_playbackPosition.value}"
+            )
+
             val duration = p.duration
             if (duration != C.TIME_UNSET && duration > 0) {
                 _playbackDuration.value = duration

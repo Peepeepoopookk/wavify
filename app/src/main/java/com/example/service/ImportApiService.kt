@@ -10,6 +10,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import okhttp3.ResponseBody
 
 @JsonClass(generateAdapter = true)
 data class AddSongRequest(
@@ -105,7 +106,16 @@ interface ImportApiService {
     suspend fun getArtistTracks(@Path("artistName") artistName: String): List<DriveTrack>
 
     @GET("/api/app/playlists")
-    suspend fun getPlaylists(@Query("deviceId") deviceId: String): List<ImportedPlaylist>
+    suspend fun getAppPlaylistsRaw(
+        @Query("device_id") deviceIdSnake: String,
+        @Query("deviceId") deviceIdCamel: String
+    ): ResponseBody
+
+    @GET("/api/playlists")
+    suspend fun getPlaylistsRaw(
+        @Query("device_id") deviceIdSnake: String,
+        @Query("deviceId") deviceIdCamel: String
+    ): ResponseBody
 
     @GET("/api/playlists/{playlistId}")
     suspend fun getPlaylistDetails(@Path("playlistId") playlistId: String): ImportedPlaylist

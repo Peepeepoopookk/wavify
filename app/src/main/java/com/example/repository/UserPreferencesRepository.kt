@@ -37,7 +37,20 @@ class UserPreferencesRepository(private val context: Context) {
         val MUSIC_CACHE_LIMIT_MB = intPreferencesKey("music_cache_limit_mb")
         val PREFETCH_ON_CELLULAR = booleanPreferencesKey("prefetch_on_cellular")
         val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
+        val FAVORITE_TRACK_IDS = stringSetPreferencesKey("favorite_track_ids")
     }
+
+    val favoriteTrackIdsFlow: Flow<Set<String>> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.FAVORITE_TRACK_IDS] ?: emptySet()
+        }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
         .catch { exception ->
@@ -61,6 +74,12 @@ class UserPreferencesRepository(private val context: Context) {
                 offlineMode = preferences[PreferencesKeys.OFFLINE_MODE] ?: false
             )
         }
+
+    suspend fun updateFavoriteTrackIds(trackIds: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FAVORITE_TRACK_IDS] = trackIds
+        }
+    }
 
     suspend fun ensureDeviceId(): String {
         var currentId = ""

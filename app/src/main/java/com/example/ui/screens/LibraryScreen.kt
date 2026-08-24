@@ -319,6 +319,7 @@ fun SongsSubTab(
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 items(tracks, key = { it.id }) { track ->
+                    val onDownloadClick = remember(track.id) { { viewModel.downloadTrack(track.id) } }
                     TrackRow(
                         track = track,
                         isActive = currentTrack?.id == track.id,
@@ -326,7 +327,7 @@ fun SongsSubTab(
                         progress = downloadProgress[track.id] ?: 0f,
                         viewModel = viewModel, // Pass it here
                         onTrackSelect = onTrackSelect,
-                        onDownloadClick = { viewModel.downloadTrack(track.id) },
+                        onDownloadClick = onDownloadClick,
                         onArtistClick = onArtistClick,
                         currentAccentColor = accentColor
                     )
@@ -586,11 +587,13 @@ fun DownloadsSubTab(
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 items(sortedTracks, key = { it.id }) { track ->
+                    val onRowClick = remember(track.id, sortedTracks) { { viewModel.setTrack(track, sortedTracks) } }
+                    val onDeleteClick = remember(track.id) { { viewModel.deleteDownloadedTrack(track.id) } }
                     DownloadTrackRow(
                         track = track,
                         isActive = currentTrack?.id == track.id,
-                        onRowClick = { viewModel.setTrack(track, sortedTracks) },
-                        onDeleteClick = { viewModel.deleteDownloadedTrack(track.id) },
+                        onRowClick = onRowClick,
+                        onDeleteClick = onDeleteClick,
                         onArtistClick = onArtistClick
                     )
                 }

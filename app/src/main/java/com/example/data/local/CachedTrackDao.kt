@@ -12,6 +12,9 @@ interface CachedTrackDao {
     @Query("SELECT * FROM cached_tracks ORDER BY title COLLATE NOCASE ASC")
     fun getAllTracks(): Flow<List<CachedTrackEntity>>
 
+    @Query("SELECT * FROM cached_tracks WHERE driveFileId = :driveFileId LIMIT 1")
+    suspend fun getByDriveFileId(driveFileId: String): CachedTrackEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tracks: List<CachedTrackEntity>)
 

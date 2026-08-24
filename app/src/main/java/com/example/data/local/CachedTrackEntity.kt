@@ -39,8 +39,10 @@ data class CachedTrackEntity(
 ) {
     fun toTrack(
         isDownloaded: Boolean = false,
-        localFilePath: String? = null
+        localFilePath: String? = null,
+        albumArtOverride: String? = null
     ): Track {
+        val resolvedAlbumArt = albumArtOverride?.takeIf { it.isNotBlank() } ?: albumArt
         return Track(
             id = id,
             driveFileId = driveFileId,
@@ -51,8 +53,8 @@ data class CachedTrackEntity(
             duration = duration,
             durationSeconds = durationSeconds,
             spotifyId = spotifyId,
-            album_art = albumArt,
-            albumArt = albumArt,
+            album_art = resolvedAlbumArt,
+            albumArt = resolvedAlbumArt,
             streamUrl = streamUrl,
             language = language,
             source = source,

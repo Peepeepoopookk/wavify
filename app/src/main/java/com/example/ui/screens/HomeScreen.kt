@@ -38,6 +38,7 @@ import com.example.model.ImportedPlaylist
 import com.example.model.Artist
 import com.example.ui.components.AlbumArtImage
 import com.example.ui.components.HomeShimmerContent
+import com.example.viewmodel.HomeSectionKind
 import com.example.viewmodel.MainViewModel
 import com.example.viewmodel.ProfileViewModel
 
@@ -67,6 +68,10 @@ fun HomeScreen(
     val context = LocalContext.current
     var compactTrackCards by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        viewModel.loadImportedPlaylists()
+    }
+
     val madeForYou = remember(allTracks) {
         allTracks
             .sortedBy { "${it.id}-${it.title}" }
@@ -74,30 +79,37 @@ fun HomeScreen(
     }
     val recentPreview = remember(recentlyPlayed) { recentlyPlayed.take(12) }
     val downloadedPreview = remember(downloadedTracks) { downloadedTracks.take(8) }
-    val localPlaylistPreview = remember(localPlaylists) { localPlaylists.take(12) }
-    val importedPlaylistPreview = remember(importedPlaylists) { importedPlaylists.take(12) }
+    val localPlaylistPreview = remember(localPlaylists) { localPlaylists }
+    val importedPlaylistPreview = remember(importedPlaylists) { importedPlaylists }
+    val hasPlaylistPreview = importedPlaylistPreview.isNotEmpty() || localPlaylistPreview.isNotEmpty()
     val topArtistPreview = remember(topArtists) { topArtists.take(12) }
     val visibleHomeSections = remember(homeSections) {
-        homeSections.take(6)
+        homeSections.take(14)
+    }
+    val playlistCoverUrls = remember(importedPlaylistPreview) {
+        importedPlaylistPreview
+            .flatMap { it.playlistMosaicUrls() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            .distinct()
+            .take(4)
     }
     val preloadAlbumArtUrls = remember(
         recentPreview,
-        downloadedPreview,
+        topArtistPreview,
         madeForYou,
-        importedPlaylistPreview,
-        visibleHomeSections
+        playlistCoverUrls
     ) {
         buildList {
-            addAll(recentPreview.map { it.albumArt })
-            addAll(downloadedPreview.map { it.albumArt })
-            addAll(madeForYou.map { it.albumArt })
-            addAll(importedPlaylistPreview.mapNotNull { it.bestCoverImage ?: it.cover_collage.firstOrNull() })
-            addAll(visibleHomeSections.flatMap { section -> section.tracks.take(4).map { it.albumArt } })
+            addAll(recentPreview.map { it.albumArt }.take(4))
+            addAll(playlistCoverUrls)
+            addAll(topArtistPreview.mapNotNull { it.cover_image }.take(4))
+            addAll(madeForYou.map { it.albumArt }.take(4))
         }
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
             .distinct()
-            .take(24)
+            .take(16)
     }
 
     LaunchedEffect(preloadAlbumArtUrls) {
@@ -105,7 +117,7 @@ fun HomeScreen(
             context.imageLoader.enqueue(
                 ImageRequest.Builder(context)
                     .data(url)
-                    .size(320, 320)
+                    .size(220, 220)
                     .memoryCacheKey(url)
                     .diskCacheKey(url)
                     .build()
@@ -213,23 +225,20 @@ fun HomeScreen(
                     }
                 }
 
-                if (downloadedPreview.isNotEmpty()) {
-                    item(key = "downloaded-tracks", contentType = "track-section") {
-                        HomeSection(title = "Available Offline", onSeeAllClick = { onNavigateToLibrary("downloads") }) {
-                            HomeTrackRail(
-                                tracks = downloadedPreview,
-                                compactTrackCards = compactTrackCards,
-                                contentTypePrefix = "downloaded",
-                                onTrackClick = { track -> onTrackSelect(track, downloadedTracks) }
-                            )
-                        }
-                    }
-                }
-
-                if (localPlaylistPreview.isNotEmpty()) {
-                    item(key = "local-playlists", contentType = "playlist-section") {
-                        HomeSection(title = "Your Playlists", onSeeAllClick = {}) {
+                if (hasPlaylistPreview) {
+                    item(key = "playlists", contentType = "playlist-section") {
+                        HomeSection(title = "Playlists", onSeeAllClick = { onNavigateToLibrary("playlists") }) {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+                                items(
+                                    items = importedPlaylistPreview,
+                                    key = { it.id },
+                                    contentType = { "imported-playlist-card" }
+                                ) { playlist ->
+                                    ImportedPlaylistCard(
+                                        playlist = playlist,
+                                        onClick = { onPlaylistClick(playlist.id, true) }
+                                    )
+                                }
                                 items(
                                     items = localPlaylistPreview,
                                     key = { it.id },
@@ -262,21 +271,15 @@ fun HomeScreen(
                     }
                 }
 
-                if (importedPlaylistPreview.isNotEmpty()) {
-                    item(key = "imported-playlists", contentType = "playlist-section") {
-                        HomeSection(title = "Imported Playlists", onSeeAllClick = {}) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                                items(
-                                    items = importedPlaylistPreview,
-                                    key = { it.id },
-                                    contentType = { "imported-playlist-card" }
-                                ) { playlist ->
-                                    ImportedPlaylistCard(
-                                        playlist = playlist,
-                                        onClick = { onPlaylistClick(playlist.id, true) }
-                                    )
-                                }
-                            }
+                if (downloadedPreview.isNotEmpty()) {
+                    item(key = "downloaded-tracks", contentType = "track-section") {
+                        HomeSection(title = "Available Offline", onSeeAllClick = { onNavigateToLibrary("downloads") }) {
+                            HomeTrackRail(
+                                tracks = downloadedPreview,
+                                compactTrackCards = compactTrackCards,
+                                contentTypePrefix = "downloaded",
+                                onTrackClick = { track -> onTrackSelect(track, downloadedTracks) }
+                            )
                         }
                     }
                 }
@@ -291,8 +294,16 @@ fun HomeScreen(
                 }
 
                 visibleHomeSections.forEach { section ->
-                    item(key = "genre_${section.genre}", contentType = "genre-section") {
-                        HomeSection(title = section.title, onSeeAllClick = { onGenreClick(section.genre) }) {
+                    item(key = "${section.kind}_${section.filterValue}_${section.title}", contentType = "suggestion-section") {
+                        val seeAllClick = when (section.kind) {
+                            HomeSectionKind.GENRE -> ({ onGenreClick(section.filterValue) })
+                            HomeSectionKind.LANGUAGE -> ({
+                                viewModel.setLanguageFilter(section.filterValue)
+                                onNavigateToLibrary("songs")
+                            })
+                            HomeSectionKind.COLLECTION -> ({ onNavigateToLibrary("songs") })
+                        }
+                        HomeSection(title = section.title, onSeeAllClick = seeAllClick) {
                             if (section.layoutType == com.example.viewmodel.LayoutType.GRID) {
                                 val genreTracks = section.tracks
                                 MadeForYouSection(
@@ -383,7 +394,7 @@ fun TrackCard(track: Track, onClick: () -> Unit) {
             contentDescription = null,
             modifier = Modifier.size(140.dp).clip(RoundedCornerShape(12.dp)),
             contentScale = ContentScale.Crop,
-            requestSize = 400
+            requestSize = 256
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(track.title, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
@@ -424,7 +435,7 @@ fun ArtistCard(artist: Artist, onClick: () -> Unit) {
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                requestSize = 300
+                requestSize = 220
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -434,36 +445,18 @@ fun ArtistCard(artist: Artist, onClick: () -> Unit) {
 
 @Composable
 fun ImportedPlaylistCard(playlist: ImportedPlaylist, onClick: () -> Unit) {
-    val tracks = remember(playlist.id, playlist.tracks) {
-        playlist.tracks.map { it.toTrack() }
+    val coverUrls = remember(
+        playlist.id,
+        playlist.cover_image,
+        playlist.coverImageOriginal,
+        playlist.cover_collage,
+        playlist.tracks
+    ) {
+        playlist.playlistMosaicUrls()
     }
-    val coverImage = playlist.bestCoverImage?.takeIf { it.isNotBlank() }
     
     Column(modifier = Modifier.width(140.dp).clickable { onClick() }) {
-        if (coverImage != null) {
-            AlbumArtImage(
-                albumArt = coverImage,
-                fallbackSeed = playlist.id,
-                contentDescription = null,
-                modifier = Modifier.size(140.dp).clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop,
-                requestSize = 400
-            )
-        } else if (playlist.cover_collage.size > 1) {
-            PlaylistMosaicCover(urls = playlist.cover_collage)
-        } else if (playlist.cover_collage.size == 1 && playlist.cover_collage[0].isNotBlank()) {
-            AlbumArtImage(
-                albumArt = playlist.cover_collage[0],
-                fallbackSeed = playlist.id,
-                contentDescription = null,
-                modifier = Modifier.size(140.dp).clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop,
-                requestSize = 400
-            )
-        } else {
-            // Fallback for older data or missing collage
-            PlaylistMosaicCover(urls = tracks.take(4).mapNotNull { it.albumArt })
-        }
+        PlaylistMosaicCover(urls = coverUrls, fallbackSeed = playlist.id)
         Spacer(modifier = Modifier.height(8.dp))
         Text(playlist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
         Text("${playlist.trackCount} tracks", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -471,24 +464,34 @@ fun ImportedPlaylistCard(playlist: ImportedPlaylist, onClick: () -> Unit) {
 }
 
 @Composable
-fun PlaylistMosaicCover(urls: List<String>) {
+fun PlaylistMosaicCover(
+    urls: List<String>,
+    fallbackSeed: String,
+    modifier: Modifier = Modifier.size(140.dp)
+) {
     Box(
-        modifier = Modifier
-            .size(140.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         if (urls.isEmpty()) {
-            Icon(Icons.Default.MusicNote, null, modifier = Modifier.size(48.dp).align(Alignment.Center), tint = Color.White)
+            AlbumArtImage(
+                albumArt = null,
+                fallbackSeed = fallbackSeed,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                requestSize = 300
+            )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.weight(1f)) {
-                    MosaicItem(url = urls.getOrNull(0), fallbackSeed = "mosaic-${urls.hashCode()}-0", modifier = Modifier.weight(1f))
-                    MosaicItem(url = urls.getOrNull(1), fallbackSeed = "mosaic-${urls.hashCode()}-1", modifier = Modifier.weight(1f))
+                    MosaicItem(url = urls.getOrNull(0), fallbackSeed = "$fallbackSeed-mosaic-0", modifier = Modifier.weight(1f))
+                    MosaicItem(url = urls.getOrNull(1), fallbackSeed = "$fallbackSeed-mosaic-1", modifier = Modifier.weight(1f))
                 }
                 Row(modifier = Modifier.weight(1f)) {
-                    MosaicItem(url = urls.getOrNull(2), fallbackSeed = "mosaic-${urls.hashCode()}-2", modifier = Modifier.weight(1f))
-                    MosaicItem(url = urls.getOrNull(3), fallbackSeed = "mosaic-${urls.hashCode()}-3", modifier = Modifier.weight(1f))
+                    MosaicItem(url = urls.getOrNull(2), fallbackSeed = "$fallbackSeed-mosaic-2", modifier = Modifier.weight(1f))
+                    MosaicItem(url = urls.getOrNull(3), fallbackSeed = "$fallbackSeed-mosaic-3", modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -503,7 +506,7 @@ fun MosaicItem(url: String?, fallbackSeed: String, modifier: Modifier = Modifier
         contentDescription = null,
         modifier = modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
-        requestSize = 200
+        requestSize = 160
     )
 }
 
@@ -570,7 +573,7 @@ fun MixTile(track: Track, modifier: Modifier = Modifier, onClick: () -> Unit) {
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            requestSize = 400
+            requestSize = 320
         )
         
         Box(
