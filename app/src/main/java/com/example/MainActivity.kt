@@ -247,7 +247,7 @@ fun MainAppScaffold(
     LaunchedEffect(updateState) {
         when (val state = updateState) {
             is AppUpdateState.UpToDate -> {
-                Toast.makeText(context, "Wavify is up to date (v${state.version})", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "You're on the latest version (v${state.version})", Toast.LENGTH_SHORT).show()
                 viewModel.dismissUpdateDialog()
             }
             is AppUpdateState.Error -> {
@@ -629,7 +629,9 @@ fun MainAppScaffold(
                         },
                         onCheckForUpdates = {
                             viewModel.checkForUpdates(isUserInitiated = true, forceCheck = true)
-                        }
+                        },
+                        isCheckingUpdates = updateState is AppUpdateState.Checking,
+                        currentVersionName = viewModel.getCurrentAppVersionName()
                     )
                 }
                 composable(

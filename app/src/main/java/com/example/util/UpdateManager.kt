@@ -2,11 +2,12 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +17,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "UpdateManager"
@@ -31,6 +31,11 @@ data class AppReleaseInfo(
     val apkName: String = "wavify-update.apk",
     val apkSize: Long = 0L,
     val publishedAt: String? = null
+)
+
+data class AppInstalledVersion(
+    val versionName: String,
+    val versionCode: Long
 )
 
 sealed class UpdateCheckResult {
@@ -49,13 +54,38 @@ class UpdateManager(private val context: Context) {
         .build()
 
     /**
+     * Dynamically resolves the current installed package's version name and version code.
+     */
+    fun getCurrentAppVersion(): AppInstalledVersion {
+        return try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            val name = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: BuildConfig.VERSION_NAME
+            val code = PackageInfoCompat.getLongVersionCode(packageInfo)
+            AppInstalledVersion(name, code)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load package info, falling back to BuildConfig", e)
+            AppInstalledVersion(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong())
+        }
+    }
+
+    /**
      * Checks for updates by querying dashboard API first, then falling back to GitHub Releases API.
      */
     suspend fun checkForUpdates(
         customEndpoint: String? = null,
         forceCheck: Boolean = false
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
-        val currentVersion = BuildConfig.VERSION_NAME
+        val installed = getCurrentAppVersion()
+        val currentVersion = installed.versionName
+        val currentVersionCode = installed.versionCode
 
         val endpoints = listOfNotNull(
             customEndpoint,
@@ -69,11 +99,11 @@ class UpdateManager(private val context: Context) {
 
         for (endpoint in endpoints) {
             try {
-                Log.d(TAG, "Checking for update at: $endpoint")
+                Log.d(TAG, "Checking for update at: $endpoint (current: $currentVersion, code: $currentVersionCode, forceCheck: $forceCheck)")
                 val request = Request.Builder()
                     .url(endpoint)
                     .header("Accept", "application/vnd.github.v3+json, application/json")
-                    .header("User-Agent", "Wavify-Android-App/${BuildConfig.VERSION_NAME}")
+                    .header("User-Agent", "Wavify-Android-App/$currentVersion")
                     .build()
 
                 httpClient.newCall(request).execute().use { response ->
@@ -86,10 +116,15 @@ class UpdateManager(private val context: Context) {
                     val bodyString = response.body?.string() ?: return@use
                     val releaseInfo = parseReleaseJson(bodyString) ?: return@use
 
-                    val isNewer = isNewerVersion(releaseInfo.versionName, currentVersion)
-                    Log.d(TAG, "Found release: ${releaseInfo.versionName}, current: $currentVersion, isNewer: $isNewer")
+                    val isNewer = isNewerVersion(
+                        remoteVersion = releaseInfo.versionName,
+                        localVersion = currentVersion,
+                        remoteVersionCode = releaseInfo.versionCode,
+                        localVersionCode = currentVersionCode
+                    )
+                    Log.d(TAG, "Found release: ${releaseInfo.versionName} (code: ${releaseInfo.versionCode}), current: $currentVersion (code: $currentVersionCode), isNewer: $isNewer")
 
-                    if (isNewer || (forceCheck && releaseInfo.apkUrl.isNotBlank())) {
+                    if (isNewer && releaseInfo.apkUrl.isNotBlank()) {
                         return@withContext UpdateCheckResult.Available(releaseInfo, currentVersion)
                     } else {
                         return@withContext UpdateCheckResult.UpToDate(currentVersion)
@@ -112,13 +147,18 @@ class UpdateManager(private val context: Context) {
         return try {
             val json = JSONObject(jsonString)
 
-            // GitHub releases format has "tag_name", "body", "assets"
-            // Dashboard format may have "version_name", "download_url", etc.
             val tagName = json.optString("tag_name", json.optString("tag", "v1.0.0"))
-            val versionName = json.optString(
+            val rawVersionName = json.optString(
                 "version_name",
-                json.optString("version", tagName.removePrefix("v").trim())
-            ).ifBlank { tagName.removePrefix("v").trim() }
+                json.optString("version", tagName)
+            ).ifBlank { tagName }
+
+            // Clean version name (strip leading "Wavify", "v", etc.)
+            val versionName = rawVersionName
+                .replace(Regex("(?i)wavify"), "")
+                .replace(Regex("^[vV]"), "")
+                .trim()
+                .ifBlank { rawVersionName.removePrefix("v").trim() }
 
             val title = json.optString("name", json.optString("title", "Wavify $tagName"))
             val notes = json.optString("body", json.optString("release_notes", json.optString("changelog", "")))
@@ -129,8 +169,8 @@ class UpdateManager(private val context: Context) {
                 else -> null
             }
 
-            var apkUrl = json.optString("download_url", json.optString("apk_url", json.optString("url", "")))
-            var apkName = "Wavify-$versionName.apk"
+            var apkUrl = json.optString("apk_download_url", json.optString("download_url", json.optString("apk_url", json.optString("url", ""))))
+            var apkName = json.optString("apk_name", "Wavify-$versionName.apk")
             var apkSize = 0L
 
             if (json.has("assets")) {
@@ -170,19 +210,57 @@ class UpdateManager(private val context: Context) {
     }
 
     /**
-     * Compares semantic versions (e.g., "1.0.1" vs "1.0.0" or "2.0" vs "1.9.5").
+     * Cleans extraneous prefixes such as "Wavify", "v", "V", and leading/trailing whitespace.
      */
-    fun isNewerVersion(remoteVersion: String, localVersion: String): Boolean {
-        val cleanRemote = remoteVersion.removePrefix("v").trim()
-        val cleanLocal = localVersion.removePrefix("v").trim()
+    fun cleanVersionString(version: String): String {
+        return version
+            .replace(Regex("(?i)wavify"), "")
+            .trim()
+            .replace(Regex("^[vV]"), "")
+            .trim()
+    }
 
-        if (cleanLocal.equals("dev", ignoreCase = true)) {
-            // For local development builds, allow testing update prompts
-            return true
+    /**
+     * Parses a version string into a list of integers, e.g. "1.0.1" -> [1, 0, 1].
+     */
+    fun normalizeVersionString(version: String): List<Int> {
+        val cleaned = cleanVersionString(version)
+        val parts = cleaned.split(".").mapNotNull { segment ->
+            val trimmedSegment = segment.trim().dropWhile { !it.isDigit() }
+            val digits = trimmedSegment.takeWhile { it.isDigit() }
+            digits.toIntOrNull()
+        }
+        return if (parts.isEmpty()) listOf(0) else parts
+    }
+
+    /**
+     * Compares semantic versions (e.g., "1.0.1" vs "1.0.0").
+     * Returns true ONLY if remoteVersion is strictly greater than localVersion.
+     */
+    fun isNewerVersion(
+        remoteVersion: String,
+        localVersion: String,
+        remoteVersionCode: Int? = null,
+        localVersionCode: Long? = null
+    ): Boolean {
+        val cleanLocal = cleanVersionString(localVersion)
+        val cleanRemote = cleanVersionString(remoteVersion)
+
+        // Strict equality check on clean version strings
+        if (cleanRemote.equals(cleanLocal, ignoreCase = true)) {
+            if (remoteVersionCode != null && localVersionCode != null && localVersionCode > 0) {
+                return remoteVersionCode > localVersionCode
+            }
+            return false
         }
 
-        val remoteParts = cleanRemote.split(".").mapNotNull { it.toIntOrNull() }
-        val localParts = cleanLocal.split(".").mapNotNull { it.toIntOrNull() }
+        // Semantic integer segment comparison
+        val remoteParts = normalizeVersionString(remoteVersion)
+        val localParts = if (cleanLocal.equals("dev", ignoreCase = true)) {
+            listOf(0, 0, 0)
+        } else {
+            normalizeVersionString(localVersion)
+        }
 
         val maxParts = maxOf(remoteParts.size, localParts.size)
         for (i in 0 until maxParts) {
@@ -190,6 +268,11 @@ class UpdateManager(private val context: Context) {
             val l = localParts.getOrElse(i) { 0 }
             if (r > l) return true
             if (r < l) return false
+        }
+
+        // If numeric segments are identical, check versionCode if present
+        if (remoteVersionCode != null && localVersionCode != null && localVersionCode > 0) {
+            return remoteVersionCode > localVersionCode
         }
 
         return false
@@ -214,7 +297,7 @@ class UpdateManager(private val context: Context) {
 
             val request = Request.Builder()
                 .url(release.apkUrl)
-                .header("User-Agent", "Wavify-Android-App/${BuildConfig.VERSION_NAME}")
+                .header("User-Agent", "Wavify-Android-App/${getCurrentAppVersion().versionName}")
                 .build()
 
             val response = httpClient.newCall(request).execute()

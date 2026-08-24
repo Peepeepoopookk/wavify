@@ -1731,6 +1731,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _updateState.value = AppUpdateState.Idle
     }
 
+    fun getCurrentAppVersionName(): String {
+        return updateManager.getCurrentAppVersion().versionName
+    }
+
     override fun onCleared() {
         playbackTickerJob?.cancel()
         sleepTimerJob?.cancel()

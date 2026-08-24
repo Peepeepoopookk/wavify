@@ -52,6 +52,8 @@ fun ProfileScreen(
     onBackClick: () -> Unit,
     onEqualizerClick: () -> Unit,
     onCheckForUpdates: () -> Unit = {},
+    isCheckingUpdates: Boolean = false,
+    currentVersionName: String = BuildConfig.VERSION_NAME,
     viewModel: ProfileViewModel = viewModel()
 ) {
     val userPrefs by viewModel.userPreferences.collectAsStateWithLifecycle()
@@ -341,7 +343,8 @@ fun ProfileScreen(
             SettingsSection(title = "About & Updates") {
                 SettingsActionItem(
                     label = "Check for updates",
-                    value = "v${BuildConfig.VERSION_NAME}",
+                    value = if (isCheckingUpdates) "Checking..." else "v$currentVersionName",
+                    isLoading = isCheckingUpdates,
                     onClick = onCheckForUpdates
                 )
             }
@@ -349,7 +352,7 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Wavify v${BuildConfig.VERSION_NAME} (${BuildConfig.BUILD_TYPE})",
+                text = "Wavify v$currentVersionName (${BuildConfig.BUILD_TYPE})",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -461,19 +464,29 @@ fun SettingsDropdownItem(
 fun SettingsActionItem(
     label: String,
     value: String,
+    isLoading: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable(enabled = !isLoading) { onClick() }
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = label, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Text(text = value, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
