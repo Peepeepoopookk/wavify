@@ -31,7 +31,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          python3 -c "import os, base64; data = os.environ.get('KEYSTORE_BASE64', '').strip(); open(os.environ['RUNNER_TEMP'] + '/release.keystore', 'wb').write(base64.b64decode(data))"
+          python3 -c "import os, base64; raw = os.environ.get('KEYSTORE_BASE64', ''); cleaned = ''.join(raw.split()); cleaned += '=' * ((4 - len(cleaned) % 4) % 4); open(os.environ['RUNNER_TEMP'] + '/release.keystore', 'wb').write(base64.b64decode(cleaned))"
           if [ ! -s "$RUNNER_TEMP/release.keystore" ]; then
             echo "Error: Keystore file is empty after decoding"
             exit 1
