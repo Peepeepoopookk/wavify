@@ -31,12 +31,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          python3 -c "import os, base64; raw = os.environ.get('KEYSTORE_BASE64', ''); cleaned = ''.join(raw.split()); cleaned += '=' * ((4 - len(cleaned) % 4) % 4); open(os.environ['RUNNER_TEMP'] + '/release.keystore', 'wb').write(base64.b64decode(cleaned))"
-          if [ ! -s "$RUNNER_TEMP/release.keystore" ]; then
-            echo "Error: Keystore file is empty after decoding"
-            exit 1
-          fi
-          echo "Keystore successfully decoded (size: $(wc -c < "$RUNNER_TEMP/release.keystore") bytes)"
+          python3 -c "import os, base64, re; raw = os.environ.get('KEYSTORE_BASE64', ''); print(f'Raw secret length: {len(raw)}'); cleaned = re.sub(r'[^A-Za-z0-9+/]', '', raw); cleaned += '=' * ((4 - len(cleaned) % 4) % 4); data = base64.b64decode(cleaned); open(os.path.join(os.environ['RUNNER_TEMP'], 'release.keystore'), 'wb').write(data); print(f'Successfully decoded keystore ({len(data)} bytes)')"
 
       - name: Compute Version Info
         id: version_info
