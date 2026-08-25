@@ -439,8 +439,8 @@ fun MainAppScaffold(
                     HomeScreen(
                         viewModel = viewModel,
                         profileViewModel = profileViewModel,
-                        onTrackSelect = { track, tracks ->
-                            viewModel.setTrack(track, tracks)
+                        onTrackSelect = { track ->
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onPlaylistClick = { playlistId, isImported ->
@@ -482,8 +482,8 @@ fun MainAppScaffold(
                 ) {
                     SearchScreen(
                         viewModel = viewModel,
-                        onTrackSelect = { track, tracks ->
-                            viewModel.setTrack(track, tracks)
+                        onTrackSelect = { track ->
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onArtistClick = { artistName ->
@@ -511,7 +511,7 @@ fun MainAppScaffold(
                         viewModel = viewModel,
                         profileViewModel = profileViewModel,
                         onTrackSelect = { track ->
-                            viewModel.setTrack(track)
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onPlaylistClick = { playlistId, isImported ->
@@ -538,26 +538,7 @@ fun MainAppScaffold(
                         mainViewModel = viewModel,
                         profileViewModel = profileViewModel,
                         onTrackSelect = { track ->
-                            val playlist = importViewModel.importHistory.value.map { item: com.example.service.ImportHistoryItem ->
-                                com.example.model.Track(
-                                    id = item.driveFileId ?: "",
-                                    title = item.title,
-                                    artist = item.artist,
-                                    album = "",
-                                    duration = item.duration ?: "0:00",
-                                    durationSeconds = 0,
-                                    albumArt = resolveAlbumArt(
-                                        primary = item.albumArt,
-                                        secondary = null,
-                                        seed = "${item.driveFileId.orEmpty()}-${item.title}-${item.artist}"
-                                    ),
-                                    streamUrl = "",
-                                    driveFileId = item.driveFileId ?: "",
-                                    genre = "",
-                                    language = ""
-                                )
-                            }
-                            viewModel.setTrack(track, playlist)
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onProfileClick = {
@@ -578,8 +559,8 @@ fun MainAppScaffold(
                         artistName = artistName,
                         viewModel = viewModel,
                         onBackClick = { navController.popBackStack() },
-                        onTrackSelect = { track, playlist ->
-                            viewModel.setTrack(track, playlist)
+                        onTrackSelect = { track ->
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onArtistClick = { tappedArtist ->
@@ -601,8 +582,8 @@ fun MainAppScaffold(
                         genre = genre,
                         viewModel = viewModel,
                         onBackClick = { navController.popBackStack() },
-                        onTrackSelect = { track, tracks ->
-                            viewModel.setTrack(track, tracks)
+                        onTrackSelect = { track ->
+                            viewModel.playEndless(track)
                             isNowPlayingExpanded = true
                         },
                         onArtistClick = { artistName ->
@@ -667,7 +648,7 @@ fun MainAppScaffold(
                         viewModel = viewModel,
                         onBackClick = { navController.popBackStack() },
                         onTrackSelect = { track, tracks ->
-                            viewModel.setTrack(track, tracks)
+                            viewModel.playFromPlaylist(track, tracks)
                             isNowPlayingExpanded = true
                         },
                         onArtistClick = { artistName ->

@@ -39,7 +39,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SearchScreen(
     viewModel: MainViewModel,
-    onTrackSelect: (Track, List<Track>) -> Unit,
+    onTrackSelect: (Track) -> Unit,
     onArtistClick: (String) -> Unit
 ) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -106,7 +106,7 @@ fun SearchScreen(
                         track = track,
                         onClick = {
                             recentSearches = updatedRecentSearches(recentSearches, searchQuery)
-                            onTrackSelect(track, filteredTracks)
+                            onTrackSelect(track)
                         },
                         onArtistClick = onArtistClick
                     )

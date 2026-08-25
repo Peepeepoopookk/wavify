@@ -47,7 +47,7 @@ import com.example.viewmodel.ProfileViewModel
 fun HomeScreen(
     viewModel: MainViewModel,
     profileViewModel: ProfileViewModel,
-    onTrackSelect: (Track, List<Track>) -> Unit,
+    onTrackSelect: (Track) -> Unit,
     onPlaylistClick: (String, Boolean) -> Unit,
     onArtistClick: (String) -> Unit,
     onGenreClick: (String) -> Unit,
@@ -219,7 +219,7 @@ fun HomeScreen(
                                 tracks = recentPreview,
                                 compactTrackCards = compactTrackCards,
                                 contentTypePrefix = "recent",
-                                onTrackClick = { track -> onTrackSelect(track, recentlyPlayed) }
+                                onTrackClick = onTrackSelect
                             )
                         }
                     }
@@ -278,7 +278,7 @@ fun HomeScreen(
                                 tracks = downloadedPreview,
                                 compactTrackCards = compactTrackCards,
                                 contentTypePrefix = "downloaded",
-                                onTrackClick = { track -> onTrackSelect(track, downloadedTracks) }
+                                onTrackClick = onTrackSelect
                             )
                         }
                     }
@@ -288,7 +288,7 @@ fun HomeScreen(
                     HomeSection(title = "Made For You", onSeeAllClick = {}) {
                         MadeForYouSection(
                             madeForYouTracks = madeForYou,
-                            onTrackSelect = { track -> onTrackSelect(track, madeForYou) }
+                            onTrackSelect = onTrackSelect
                         )
                     }
                 }
@@ -308,14 +308,14 @@ fun HomeScreen(
                                 val genreTracks = section.tracks
                                 MadeForYouSection(
                                     madeForYouTracks = genreTracks.take(4),
-                                    onTrackSelect = { track -> onTrackSelect(track, genreTracks) }
+                                    onTrackSelect = onTrackSelect
                                 )
                             } else {
                                 HomeTrackRail(
                                     tracks = section.tracks,
                                     compactTrackCards = compactTrackCards,
                                     contentTypePrefix = "genre-${section.genre}",
-                                    onTrackClick = { track -> onTrackSelect(track, section.tracks) }
+                                    onTrackClick = onTrackSelect
                                 )
                             }
                         }

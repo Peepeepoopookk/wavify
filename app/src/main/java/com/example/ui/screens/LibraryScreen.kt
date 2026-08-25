@@ -587,7 +587,7 @@ fun DownloadsSubTab(
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
                 items(sortedTracks, key = { it.id }) { track ->
-                    val onRowClick = remember(track.id, sortedTracks) { { viewModel.setTrack(track, sortedTracks) } }
+                    val onRowClick = remember(track.id) { { viewModel.playEndless(track) } }
                     val onDeleteClick = remember(track.id) { { viewModel.deleteDownloadedTrack(track.id) } }
                     DownloadTrackRow(
                         track = track,

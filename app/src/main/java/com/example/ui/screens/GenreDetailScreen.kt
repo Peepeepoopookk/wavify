@@ -35,7 +35,7 @@ fun GenreDetailScreen(
     genre: String,
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    onTrackSelect: (Track, List<Track>) -> Unit,
+    onTrackSelect: (Track) -> Unit,
     onArtistClick: (String) -> Unit
 ) {
     val decodedGenre = remember(genre) { android.net.Uri.decode(genre) }
@@ -48,8 +48,8 @@ fun GenreDetailScreen(
         allTracks.filter { normalizeGenreName(it.genre) == selectedGenre }
     }
     val headerArt = remember(tracks) { tracks.firstOrNull()?.albumArt }
-    val handleTrackSelect = remember(tracks, onTrackSelect) {
-        { selectedTrack: Track -> onTrackSelect(selectedTrack, tracks) }
+    val handleTrackSelect = remember(onTrackSelect) {
+        { selectedTrack: Track -> onTrackSelect(selectedTrack) }
     }
 
     Scaffold(
@@ -124,7 +124,7 @@ fun GenreDetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             WavifyPrimaryButton(
-                                onClick = { onTrackSelect(tracks.first(), tracks) },
+                                onClick = { viewModel.setTrack(tracks.first(), tracks) },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(56.dp)
@@ -137,7 +137,7 @@ fun GenreDetailScreen(
                             WavifySecondaryButton(
                                 onClick = { 
                                     val shuffled = tracks.shuffled()
-                                    onTrackSelect(shuffled.first(), shuffled) 
+                                    viewModel.setTrack(shuffled.first(), shuffled) 
                                 },
                                 modifier = Modifier
                                     .weight(1f)

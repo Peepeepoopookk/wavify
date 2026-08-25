@@ -64,6 +64,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import coil.imageLoader
+import com.example.repository.isUnmeteredNetwork
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import com.example.download.DownloadManager
@@ -202,6 +204,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _repeatMode = MutableStateFlow(RepeatMode.OFF)
     val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
 
+    private val _isEndlessQueueActive = MutableStateFlow(false)
+    val isEndlessQueueActive: StateFlow<Boolean> = _isEndlessQueueActive.asStateFlow()
+
+    private val recentlyEndedTrackIds = ArrayDeque<String>(8)
+
     private val _sleepTimerRemainingMillis = MutableStateFlow(0L)
     val sleepTimerRemainingMillis: StateFlow<Long> = _sleepTimerRemainingMillis.asStateFlow()
 
@@ -324,8 +331,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var lastSeekTimestamp = 0L
     private var pendingSeekPosition: Long? = null
     private var sleepTimerJob: Job? = null
-    private var audioPrefetchJob: Job? = null
-    private var lastPrefetchedTrackId: String? = null
+    private var audioPrefetchJobs: List<Job> = emptyList()
+    private var lastPrefetchedTrackIds: List<String> = emptyList()
     private val hydratingDownloadedArtworkIds = ConcurrentHashMap.newKeySet<String>()
     private val favoriteWriteRequests = MutableSharedFlow<Set<String>>(
         replay = 0,
@@ -337,7 +344,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (offlineMode) filter { it.isDownloaded } else this
     }
 
+    private fun prewarmProxy() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val request = okhttp3.Request.Builder()
+                    .url(BuildConfig.WAVIFY_PROXY_BASE_URL)
+                    .head()
+                    .build()
+                okhttp3.OkHttpClient().newCall(request).execute().close()
+            }
+        }
+    }
+
     init {
+        prewarmProxy()
         observeCachedTracks()
         observeDownloadWork()
 
@@ -465,6 +485,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         mediaItem?.let { item ->
                             val track = _tracks.value.find { it.id == item.mediaId }
                             if (track != null) {
+                                if (recentlyEndedTrackIds.size >= 8) {
+                                    recentlyEndedTrackIds.removeFirst()
+                                }
+                                recentlyEndedTrackIds.addLast(track.id)
                                 _currentTrack.value = track
                                 val queuedManualTracks = _manualQueue.value
                                 val isManualTransition = queuedManualTracks.firstOrNull()?.id == track.id
@@ -1042,6 +1066,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun playFromPlaylist(track: Track, playlistTracks: List<Track>) {
+        _isEndlessQueueActive.value = false
+        setTrack(track, playlistTracks)
+    }
+
+    fun playEndless(track: Track) {
+        _isEndlessQueueActive.value = true
+        val library = _tracks.value
+        if (library.isEmpty()) {
+            setTrack(track, listOf(track))
+            return
+        }
+        val shuffledRest = library.filterNot { it.id == track.id }.shuffled()
+        val endlessQueue = listOf(track) + shuffledRest
+        setTrack(track, endlessQueue)
+    }
+
     fun setTrack(track: Track, playlist: List<Track> = _tracks.value) {
         hasUserInitiatedPlayback = true
         player?.let { p ->
@@ -1155,20 +1196,67 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefetchNextQueuedTrack()
     }
 
-    @OptIn(UnstableApi::class)
-    private fun prefetchNextQueuedTrack() {
-        val nextTrack = _playbackQueue.value.firstOrNull()?.track ?: return
-        if (nextTrack.id == lastPrefetchedTrackId || nextTrack.driveFileId.isBlank()) return
+    private fun prefetchUpcomingArt(tracks: List<Track>) {
+        val app = getApplication<Application>()
+        tracks.forEachIndexed { index, track ->
+            val url = track.albumArt
+            if (url.isBlank()) return@forEachIndexed
 
-        audioPrefetchJob?.cancel()
-        lastPrefetchedTrackId = nextTrack.id
-        audioPrefetchJob = viewModelScope.launch {
-            runCatching { audioPrefetcher.prefetch(nextTrack) }
-                .onFailure { error ->
-                    if (error !is kotlinx.coroutines.CancellationException) {
-                        Log.d("WavifyPrefetch", "Next-track prefetch skipped: ${error::class.java.simpleName}")
+            if (index > 0) {
+                // 2nd-ahead track's art respects the same cellular preference as audio prefetch
+                viewModelScope.launch {
+                    val allowCellular = UserPreferencesRepository(app)
+                        .userPreferencesFlow
+                        .first()
+                        .prefetchOnCellular
+                    if (allowCellular || isUnmeteredNetwork(app)) {
+                        app.imageLoader.enqueue(
+                            coil.request.ImageRequest.Builder(app)
+                                .data(url)
+                                .size(512, 512)
+                                .memoryCacheKey(url)
+                                .diskCacheKey(url)
+                                .build()
+                        )
                     }
                 }
+            } else {
+                // Immediate-next track's art always prefetches, same priority as its audio
+                app.imageLoader.enqueue(
+                    coil.request.ImageRequest.Builder(app)
+                        .data(url)
+                        .size(512, 512)
+                        .memoryCacheKey(url)
+                        .diskCacheKey(url)
+                        .build()
+                )
+            }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun prefetchNextQueuedTrack() {
+        val upcoming = _playbackQueue.value.take(2).map { it.track }
+            .filter { it.driveFileId.isNotBlank() }
+        if (upcoming.isEmpty()) return
+
+        prefetchUpcomingArt(upcoming)
+
+        val upcomingIds = upcoming.map { it.id }
+        if (upcomingIds == lastPrefetchedTrackIds) return
+
+        audioPrefetchJobs.forEach { it.cancel() }
+        lastPrefetchedTrackIds = upcomingIds
+
+        audioPrefetchJobs = upcoming.mapIndexed { index, track ->
+            viewModelScope.launch {
+                runCatching { audioPrefetcher.prefetch(track, isImmediateNext = index == 0) }
+                    .onFailure { error ->
+                        if (error !is kotlinx.coroutines.CancellationException) {
+                            Log.d("WavifyPrefetch", "Prefetch skipped: ${error::class.java.simpleName}")
+                        }
+                    }
+            }
         }
     }
 
@@ -1380,7 +1468,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playNextTrack() {
         hasUserInitiatedPlayback = true
-        player?.seekToNextMediaItem()
+        val p = player ?: return
+        if (p.hasNextMediaItem()) {
+            p.seekToNextMediaItem()
+        } else if (_repeatMode.value != RepeatMode.ONE) {
+            continueEndlessQueue()
+        }
     }
 
     fun playPreviousTrack() {
@@ -1434,18 +1527,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun continueEndlessQueue() {
+        val library = _tracks.value
+        if (library.isEmpty()) return
+        val excludeIds = recentlyEndedTrackIds.toSet()
+        val pool = library.filterNot { it.id in excludeIds }.ifEmpty { library }
+        val nextTrack = pool.random()
+        _isEndlessQueueActive.value = true
+        playEndless(nextTrack)
+    }
+
     private fun handleQueueEnded() {
-        if (_repeatMode.value != RepeatMode.ALL) return
-        if (originalPlaybackSource.isEmpty()) return
-
-        val restartSource = if (_isShuffleEnabled.value) {
-            originalPlaybackSource.shuffled()
-        } else {
-            originalPlaybackSource
+        if (_repeatMode.value == RepeatMode.ALL) {
+            if (originalPlaybackSource.isEmpty()) return
+            val firstTrack = originalPlaybackSource.firstOrNull() ?: return
+            setTrack(firstTrack, originalPlaybackSource)
+            return
         }
+        if (_repeatMode.value == RepeatMode.ONE) return  // native ExoPlayer handles this
 
-        val firstTrack = restartSource.firstOrNull() ?: return
-        setTrack(firstTrack, restartSource)
+        // Fallback: playlist (or endless pool) ended with repeat OFF — go/stay endless
+        continueEndlessQueue()
     }
 
     fun startSleepTimer(minutes: Int) {
@@ -1764,7 +1866,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         playbackTickerJob?.cancel()
         sleepTimerJob?.cancel()
-        audioPrefetchJob?.cancel()
+        audioPrefetchJobs.forEach { it.cancel() }
         browserFuture?.let { future ->
             MediaController.releaseFuture(future)
         }

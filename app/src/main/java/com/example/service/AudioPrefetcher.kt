@@ -29,6 +29,8 @@ class AudioPrefetcher(
     private val okHttpClient = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
+        .connectTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
                 .header("User-Agent", "Mozilla/5.0")
@@ -38,13 +40,16 @@ class AudioPrefetcher(
         .build()
 
     @OptIn(UnstableApi::class)
-    suspend fun prefetch(track: Track) = withContext(Dispatchers.IO) {
-        val allowCellular = UserPreferencesRepository(appContext)
-            .userPreferencesFlow
-            .first()
-            .prefetchOnCellular
-        if (!allowCellular && !isUnmeteredNetwork(appContext)) {
-            return@withContext
+    suspend fun prefetch(track: Track, isImmediateNext: Boolean = true) = withContext(Dispatchers.IO) {
+        if (!isImmediateNext) {
+            // Only the 2nd-ahead lookahead track respects the cellular data preference.
+            val allowCellular = UserPreferencesRepository(appContext)
+                .userPreferencesFlow
+                .first()
+                .prefetchOnCellular
+            if (!allowCellular && !isUnmeteredNetwork(appContext)) {
+                return@withContext
+            }
         }
 
         val streamUrl = "${BuildConfig.WAVIFY_PROXY_BASE_URL}/stream/${track.driveFileId}"

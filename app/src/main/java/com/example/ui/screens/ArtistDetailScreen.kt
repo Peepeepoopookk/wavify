@@ -33,7 +33,7 @@ fun ArtistDetailScreen(
     artistName: String,
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    onTrackSelect: (Track, List<Track>) -> Unit,
+    onTrackSelect: (Track) -> Unit,
     onArtistClick: (String) -> Unit
 ) {
     val decodedName = remember(artistName) { android.net.Uri.decode(artistName) }
@@ -46,8 +46,8 @@ fun ArtistDetailScreen(
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
 
-    val handleTrackSelect = remember(tracks, onTrackSelect) {
-        { selectedTrack: Track -> onTrackSelect(selectedTrack, tracks) }
+    val handleTrackSelect = remember(onTrackSelect) {
+        { selectedTrack: Track -> onTrackSelect(selectedTrack) }
     }
     val handleArtistClick = remember(decodedName, onArtistClick) {
         { tappedArtist: String ->
@@ -82,11 +82,11 @@ fun ArtistDetailScreen(
                     name = decodedName,
                     trackCount = artist?.track_count ?: tracks.size,
                     coverImage = artist?.cover_image ?: tracks.firstOrNull()?.albumArt,
-                    onPlayAll = { if (tracks.isNotEmpty()) onTrackSelect(tracks.first(), tracks) },
+                    onPlayAll = { if (tracks.isNotEmpty()) viewModel.setTrack(tracks.first(), tracks) },
                     onShuffle = {
                         if (tracks.isNotEmpty()) {
                             val shuffled = tracks.shuffled()
-                            onTrackSelect(shuffled.first(), shuffled)
+                            viewModel.setTrack(shuffled.first(), shuffled)
                         }
                     }
                 )
