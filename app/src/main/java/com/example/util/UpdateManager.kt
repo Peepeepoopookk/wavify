@@ -89,13 +89,14 @@ class UpdateManager(private val context: Context) {
 
         val endpoints = listOfNotNull(
             customEndpoint,
-            BuildConfig.DASHBOARD_RELEASE_URL.takeIf { it.isNotBlank() },
             BuildConfig.GITHUB_RELEASES_URL.takeIf { it.isNotBlank() },
-            "https://api.github.com/repos/Peepeepoopookk/wavify/releases/latest"
+            "https://api.github.com/repos/Peepeepoopookk/wavify/releases/latest",
+            BuildConfig.DASHBOARD_RELEASE_URL.takeIf { it.isNotBlank() }
         ).distinct()
 
         var lastException: Throwable? = null
         var lastErrorMessage = "Failed to check for updates"
+        var hasSuccessfulCheck = false
 
         for (endpoint in endpoints) {
             try {
@@ -106,29 +107,29 @@ class UpdateManager(private val context: Context) {
                     .header("User-Agent", "Wavify-Android-App/$currentVersion")
                     .build()
 
-                httpClient.newCall(request).execute().use { response ->
+                val releaseInfo = httpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         Log.w(TAG, "Endpoint $endpoint responded with code ${response.code}")
                         lastErrorMessage = "HTTP ${response.code}: ${response.message}"
-                        return@use
+                        return@use null
                     }
 
-                    val bodyString = response.body?.string() ?: return@use
-                    val releaseInfo = parseReleaseJson(bodyString) ?: return@use
+                    val bodyString = response.body?.string() ?: return@use null
+                    parseReleaseJson(bodyString)
+                } ?: continue
 
-                    val isNewer = isNewerVersion(
-                        remoteVersion = releaseInfo.versionName,
-                        localVersion = currentVersion,
-                        remoteVersionCode = releaseInfo.versionCode,
-                        localVersionCode = currentVersionCode
-                    )
-                    Log.d(TAG, "Found release: ${releaseInfo.versionName} (code: ${releaseInfo.versionCode}), current: $currentVersion (code: $currentVersionCode), isNewer: $isNewer")
+                hasSuccessfulCheck = true
 
-                    if (isNewer && releaseInfo.apkUrl.isNotBlank()) {
-                        return@withContext UpdateCheckResult.Available(releaseInfo, currentVersion)
-                    } else {
-                        return@withContext UpdateCheckResult.UpToDate(currentVersion)
-                    }
+                val isNewer = isNewerVersion(
+                    remoteVersion = releaseInfo.versionName,
+                    localVersion = currentVersion,
+                    remoteVersionCode = releaseInfo.versionCode,
+                    localVersionCode = currentVersionCode
+                )
+                Log.d(TAG, "Found release: ${releaseInfo.versionName} (code: ${releaseInfo.versionCode}), current: $currentVersion (code: $currentVersionCode), isNewer: $isNewer")
+
+                if (isNewer && releaseInfo.apkUrl.isNotBlank()) {
+                    return@withContext UpdateCheckResult.Available(releaseInfo, currentVersion)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Error checking update from $endpoint: ${e.message}")
@@ -137,7 +138,11 @@ class UpdateManager(private val context: Context) {
             }
         }
 
-        UpdateCheckResult.Error(lastException ?: IllegalStateException(lastErrorMessage), lastErrorMessage)
+        if (hasSuccessfulCheck) {
+            UpdateCheckResult.UpToDate(currentVersion)
+        } else {
+            UpdateCheckResult.Error(lastException ?: IllegalStateException(lastErrorMessage), lastErrorMessage)
+        }
     }
 
     /**
