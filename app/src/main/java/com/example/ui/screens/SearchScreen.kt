@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,70 +50,99 @@ fun SearchScreen(
     
 
 
+    
+
+
     val genres = listOf("Malayalam", "Tamil", "Hindi", "English", "Indian")
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
-    Column(
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(error) {
+        val message = error
+        if (!message.isNullOrBlank()) {
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "Retry",
+                duration = SnackbarDuration.Indefinite
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.retryFailedOperation()
+            }
+        } else {
+            snackbarHostState.currentSnackbarData?.dismiss()
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
     ) {
-        // Search Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = { Text("Songs, artists...") },
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .focusRequester(focusRequester),
-            singleLine = true,
-            shape = CircleShape,
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                        Icon(Icons.Default.Close, null)
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.setSearchQuery(it) },
+                placeholder = { Text("Songs, artists...") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .focusRequester(focusRequester),
+                singleLine = true,
+                shape = CircleShape,
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                            Icon(Icons.Default.Close, null)
+                        }
                     }
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent
+                },
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant, focusedBorderColor = MaterialTheme.colorScheme.outline, unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant)
             )
-        )
 
-        if (searchQuery.isEmpty()) {
-            SearchInitialState(
-                genres = genres,
-                recentSearches = recentSearches,
-                onSearchClick = { viewModel.setSearchQuery(it) }
-            )
-        } else if (filteredTracks.isEmpty()) {
-            SearchEmptyState(searchQuery)
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 100.dp)
-            ) {
-                items(filteredTracks, key = { it.id }) { track ->
-                    SearchTrackRow(
-                        track = track,
-                        onClick = {
-                            recentSearches = updatedRecentSearches(recentSearches, searchQuery)
-                            onTrackSelect(track)
-                        },
-                        onArtistClick = onArtistClick
-                    )
+            if (searchQuery.isEmpty()) {
+                SearchInitialState(
+                    genres = genres,
+                    recentSearches = recentSearches,
+                    onSearchClick = { viewModel.setSearchQuery(it) }
+                )
+            } else if (filteredTracks.isEmpty()) {
+                SearchEmptyState(searchQuery)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 100.dp)
+                ) {
+                    items(filteredTracks, key = { it.id }) { track ->
+                        SearchTrackRow(
+                            track = track,
+                            onClick = {
+                                recentSearches = updatedRecentSearches(recentSearches, searchQuery)
+                                onTrackSelect(track)
+                            },
+                            onArtistClick = onArtistClick
+                        )
+                    }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 }
 
@@ -123,7 +153,7 @@ fun SearchInitialState(
     onSearchClick: (String) -> Unit
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("Recent Searches", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Recent Searches", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(8.dp))
         if (recentSearches.isEmpty()) {
             Text("Your played search terms will appear here", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,7 +171,7 @@ fun SearchInitialState(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        Text("Browse Genres", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("Browse Genres", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -176,11 +206,11 @@ fun SearchEmptyState(query: String) {
 fun GenreCard(genre: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier.height(80.dp).clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius), border = androidx.compose.foundation.BorderStroke(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.BottomStart) {
-            Text(genre, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(genre, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }
@@ -198,18 +228,20 @@ fun SearchTrackRow(track: Track, onClick: () -> Unit, onArtistClick: (String) ->
             albumArt = track.albumArt,
             fallbackSeed = track.id,
             contentDescription = null,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
             contentScale = ContentScale.Crop,
             requestSize = 96
         )
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(track.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             TappableArtistText(
                 artist = track.artist,
                 onArtistClick = onArtistClick
             )
         }
-        Text(track.duration, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(track.duration, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+

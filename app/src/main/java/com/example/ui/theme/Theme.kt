@@ -5,7 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-
+import androidx.compose.ui.unit.dp
 private val LightColorScheme = lightColorScheme(
     primary = AccentBlue,
     onPrimary = PureWhite,
@@ -45,22 +45,25 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary = Color.Black,
     tertiaryContainer = SpotifyGreenContainer,
     onTertiaryContainer = SpotifyGreen,
-    background = SpotifyDarkBackground,
+    background = AmoledBlack, // Pure black
     onBackground = SpotifyText,
-    surface = SpotifyDarkSurface,
+    surface = AmoledBlack, // Pure black cards
     onSurface = SpotifyText,
-    surfaceVariant = SpotifyDarkSurfaceHigh,
+    surfaceVariant = AmoledBlack, // Pure black variants
     onSurfaceVariant = SpotifySubtleText,
     inverseSurface = SpotifyText,
-    inverseOnSurface = SpotifyDarkBackground,
+    inverseOnSurface = AmoledBlack,
     error = SpotifyError,
     onError = Color.Black,
     errorContainer = SpotifyErrorContainer,
     onErrorContainer = Color(0xFFFFDAD6),
-    outline = SpotifyOutline,
-    outlineVariant = SpotifyOutline,
+    outline = WhiteOutline,
+    outlineVariant = WhiteOutline,
     scrim = Color.Black
 )
+
+val AppCornerRadius = 8.dp
+val OutlineWidth = 1.dp
 
 @Composable
 fun MyApplicationTheme(

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -107,7 +108,7 @@ fun PlaylistDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(playlistName, fontWeight = FontWeight.Bold) },
+                title = { Text(playlistName, style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
@@ -236,13 +237,13 @@ fun PlaylistTrackRow(
             albumArt = track.albumArt,
             fallbackSeed = track.id,
             contentDescription = null,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
             contentScale = ContentScale.Crop,
             requestSize = 96
         )
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(track.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             TappableArtistText(
                 artist = track.artist,
                 onArtistClick = onArtistClick
@@ -267,3 +268,4 @@ fun PlaylistTrackRow(
         }
     }
 }
+

@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -71,7 +72,7 @@ fun DownloadTrackRow(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
-                Text(text = "Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(text = "Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
 
@@ -117,7 +118,7 @@ fun DownloadTrackRow(
                     contentDescription = "Album Art",
                     modifier = Modifier
                         .size(52.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
                     contentScale = ContentScale.Crop,
                     requestSize = 128
                 )
@@ -127,8 +128,7 @@ fun DownloadTrackRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = track.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -145,13 +145,12 @@ fun DownloadTrackRow(
                     val fileMb = (track.durationSeconds * 0.15).coerceAtLeast(3.2)
                     Text(
                         text = String.format("%.1f MB", fileMb),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = track.duration,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
@@ -165,3 +164,6 @@ fun DownloadTrackRow(
         }
     }
 }
+
+
+

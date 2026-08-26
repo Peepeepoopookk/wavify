@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -158,13 +159,13 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(greeting, fontWeight = FontWeight.Bold, fontSize = 28.sp) },
+                title = { Text(greeting, style = MaterialTheme.typography.displayLarge) },
                 actions = {
                     IconButton(onClick = onProfileClick) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .clip(CircleShape)
+                                .clip(CircleShape).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, CircleShape)
                                 .background(Color(userPrefs.avatarColor)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -369,8 +370,7 @@ fun HomeSection(title: String, onSeeAllClick: (() -> Unit)? = null, content: @Co
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleLarge
             )
             if (onSeeAllClick != null) {
                 Text(
@@ -392,13 +392,13 @@ fun TrackCard(track: Track, onClick: () -> Unit) {
             albumArt = track.albumArt,
             fallbackSeed = track.id,
             contentDescription = null,
-            modifier = Modifier.size(140.dp).clip(RoundedCornerShape(12.dp)),
+            modifier = Modifier.size(140.dp).clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
             contentScale = ContentScale.Crop,
             requestSize = 256
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Text(track.title, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
-        Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, fontSize = 12.sp)
+        Text(track.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -408,14 +408,14 @@ fun PlaylistCard(title: String, coverColor: String, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(140.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
                 .background(Color(android.graphics.Color.parseColor(coverColor))),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.size(48.dp))
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
+        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
     }
 }
 
@@ -425,7 +425,7 @@ fun ArtistCard(artist: Artist, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(110.dp)
-                .clip(CircleShape)
+                .clip(CircleShape).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
@@ -439,7 +439,7 @@ fun ArtistCard(artist: Artist, onClick: () -> Unit) {
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(artist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp, textAlign = TextAlign.Center)
+        Text(artist.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, textAlign = TextAlign.Center)
     }
 }
 
@@ -458,8 +458,8 @@ fun ImportedPlaylistCard(playlist: ImportedPlaylist, onClick: () -> Unit) {
     Column(modifier = Modifier.width(140.dp).clickable { onClick() }) {
         PlaylistMosaicCover(urls = coverUrls, fallbackSeed = playlist.id)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(playlist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
-        Text("${playlist.trackCount} tracks", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Text(playlist.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        Text("${playlist.trackCount} tracks", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -471,7 +471,7 @@ fun PlaylistMosaicCover(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         if (urls.isEmpty()) {
@@ -517,9 +517,9 @@ fun RecentlyPlayedCard(track: Track, onClick: () -> Unit) {
             .width(260.dp)
             .height(80.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp), border = androidx.compose.foundation.BorderStroke(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline)
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(8.dp),
@@ -529,14 +529,14 @@ fun RecentlyPlayedCard(track: Track, onClick: () -> Unit) {
                 albumArt = track.albumArt,
                 fallbackSeed = track.id,
                 contentDescription = null,
-                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
                 contentScale = ContentScale.Crop,
                 requestSize = 180
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(track.title, fontWeight = FontWeight.SemiBold, maxLines = 1, fontSize = 14.sp)
-                Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, fontSize = 12.sp)
+                Text(track.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Text(track.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -564,7 +564,7 @@ fun MixTile(track: Track, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
             .clickable { onClick() }
     ) {
         AlbumArtImage(
@@ -595,16 +595,14 @@ fun MixTile(track: Track, modifier: Modifier = Modifier, onClick: () -> Unit) {
             Text(
                 text = track.title,
                 color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Text(
                 text = track.artist,
                 color = Color.White.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                maxLines = 1,
+                style = MaterialTheme.typography.bodyMedium, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
@@ -618,9 +616,9 @@ fun ImportPlaylistPromoCard(onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(0.dp), border = androidx.compose.foundation.BorderStroke(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline)
     ) {
         Box(
             modifier = Modifier
@@ -643,30 +641,31 @@ fun ImportPlaylistPromoCard(onClick: () -> Unit) {
                 Column(modifier = Modifier.weight(1.5f)) {
                     Text(
                         text = "Bring your Spotify Playlists",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Import and play your music seamlessly on Wavify.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Button(
                     onClick = onClick,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
-                    Text("Import", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Import", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
     }
 }
+
+
+
 

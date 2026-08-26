@@ -4,6 +4,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -40,7 +41,7 @@ fun EqualizerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Equalizer", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold) },
+                title = { Text("Equalizer", color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
@@ -113,7 +114,7 @@ fun VisualizerHeader(bands: List<com.example.viewmodel.EqualizerBand>, isEnabled
         modifier = Modifier
             .fillMaxWidth()
             .height(100.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
             .padding(16.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -184,7 +185,7 @@ fun VerticalEqualizerSlider(
             text = "${value.roundToInt()} dB",
             color = color.copy(alpha = alpha),
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.titleMedium
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -282,3 +283,4 @@ fun VerticalEqualizerSlider(
         )
     }
 }
+

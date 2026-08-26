@@ -10,56 +10,48 @@ import androidx.compose.ui.unit.sp
 val InterFontFamily = FontFamily.SansSerif
 
 val Typography = Typography(
+    // Greeting / Header
     displayLarge = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 33.sp,
-        lineHeight = 41.sp,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
         letterSpacing = (-0.5).sp
     ),
-    headlineMedium = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 25.sp,
-        lineHeight = 33.sp
-    ),
+    // Section headings
     titleLarge = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 21.sp,
-        lineHeight = 27.sp,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
         letterSpacing = 0.sp
     ),
+    // Song / Playlist titles
     titleMedium = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        lineHeight = 23.sp
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+        lineHeight = 20.sp
     ),
-    bodyLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 17.sp,
-        lineHeight = 25.sp,
-        letterSpacing = 0.5.sp
-    ),
+    // Artist names / Track counts
     bodyMedium = TextStyle(
         fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 21.sp
+        fontWeight = FontWeight.Light,
+        fontSize = 13.sp,
+        lineHeight = 18.sp
     ),
+    // "See all" links
     labelLarge = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 19.sp
+        fontSize = 13.sp,
+        lineHeight = 18.sp
     ),
-    labelSmall = TextStyle(
+    // Nav labels
+    labelMedium = TextStyle(
         fontFamily = InterFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 17.sp,
-        letterSpacing = 0.5.sp
+        fontSize = 11.sp,
+        lineHeight = 16.sp
     )
 )

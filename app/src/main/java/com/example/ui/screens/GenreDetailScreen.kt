@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,7 +56,7 @@ fun GenreDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(decodedGenre, fontWeight = FontWeight.Bold) },
+                title = { Text(decodedGenre, style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -90,7 +91,7 @@ fun GenreDetailScreen(
                         Box(
                             modifier = Modifier
                                 .size(200.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             AlbumArtImage(
@@ -106,8 +107,7 @@ fun GenreDetailScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = decodedGenre,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.displayLarge,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -131,7 +131,7 @@ fun GenreDetailScreen(
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(28.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Play", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Play", style = MaterialTheme.typography.titleLarge)
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             WavifySecondaryButton(
@@ -145,7 +145,7 @@ fun GenreDetailScreen(
                             ) {
                                 Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Shuffle", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("Shuffle", style = MaterialTheme.typography.titleLarge)
                             }
                         }
                     }
@@ -168,3 +168,4 @@ fun GenreDetailScreen(
         }
     }
 }
+

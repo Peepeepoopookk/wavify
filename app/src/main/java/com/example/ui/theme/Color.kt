@@ -29,3 +29,7 @@ val SpotifySubtleText = Color(0xFFB3B3B3)
 val SpotifyOutline = Color(0xFF2A2A2A)
 val SpotifyError = Color(0xFFFF6B6B)
 val SpotifyErrorContainer = Color(0xFF3A1416)
+
+val AmoledBlack = Color(0xFF000000)
+val WhiteOutline = Color(0xFFFFFFFF)
+val ProfilePurple = Color(0xFF9C27B0)

@@ -734,6 +734,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     _isLoading.value = false
                     _isInitialLibraryLoaded.value = true
+                    _error.value = null
                 }
                 .onFailure { exception ->
                     _error.value = "Failed to load tracks: ${exception.message}"
@@ -749,6 +750,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (_offlineModeEnabled.value) {
                 _importedPlaylists.value = emptyList()
                 return@launch
+            }
+            if (_error.value?.contains("playlist", ignoreCase = true) == true) {
+                _error.value = null
             }
             val cachedDetails = withContext(Dispatchers.IO) {
                 importRepository.getCachedImportedPlaylistDetails()
@@ -772,10 +776,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         importRepository.cacheImportedPlaylists(visiblePlaylists)
                     }
                     hydrateImportedPlaylistDetails(visiblePlaylists)
+                    if (_error.value?.contains("playlist", ignoreCase = true) == true) {
+                        _error.value = null
+                    }
                 }
                 .onFailure { e ->
+                    _error.value = "Failed to load playlists: ${e.message}"
                     Log.e("WavifyViewModel", "Failed to load playlists", e)
                 }
+        }
+    }
+
+    fun clearError() {
+        _error.value = null
+    }
+
+    fun retryFailedOperation() {
+        val currentError = _error.value ?: return
+        _error.value = null
+        if (currentError.contains("playlist", ignoreCase = true)) {
+            loadImportedPlaylists()
+        } else {
+            loadTracks()
         }
     }
 
@@ -851,10 +873,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val targets = playlists.filter { playlist ->
             val cached = _playlistDetailsCache.get(playlist.id)
+            val cachedTracks = _playlistTracksCache.get(playlist.id).orEmpty()
+            val isCacheValid = cached != null &&
+                    (cachedTracks.isNotEmpty() || !cached.hasAnyTracks) &&
+                    cached.total_tracks == playlist.total_tracks
+
             playlist.id.isNotBlank() &&
                     playlist.hasAnyTracks &&
                     playlist.tracks.isEmpty() &&
-                    (cached == null || cached.tracks.isEmpty()) &&
+                    !isCacheValid &&
                     hydratingImportedPlaylistIds.add(playlist.id)
         }
 
@@ -901,9 +928,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getImportedPlaylistDetails(playlistId: String): Flow<ImportedPlaylistDetailState> {
         return flow {
+            val lightweightPlaylist = _importedPlaylists.value.find { it.id == playlistId }
+            val currentTotalTracks = lightweightPlaylist?.total_tracks
+
             val cachedPlaylist = _playlistDetailsCache.get(playlistId)
             val cachedTracks = _playlistTracksCache.get(playlistId).orEmpty()
-            if (cachedPlaylist != null && (cachedTracks.isNotEmpty() || !cachedPlaylist.hasAnyTracks)) {
+            
+            val isCacheValid = cachedPlaylist != null && 
+                (cachedTracks.isNotEmpty() || !cachedPlaylist.hasAnyTracks) &&
+                (currentTotalTracks == null || cachedPlaylist.total_tracks == currentTotalTracks)
+
+            if (isCacheValid) {
                 emit(
                     ImportedPlaylistDetailState(
                         isLoading = false,
@@ -913,13 +948,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 return@flow
             }
+            
             val persistedPlaylist = withContext(Dispatchers.IO) {
                 importRepository.getCachedImportedPlaylistDetails()[playlistId]
             }
             if (persistedPlaylist != null) {
                 cacheImportedPlaylistDetails(persistedPlaylist, persist = false)
                 val persistedTracks = _playlistTracksCache.get(playlistId).orEmpty()
-                if (persistedTracks.isNotEmpty() || !persistedPlaylist.hasAnyTracks) {
+                
+                val isPersistedCacheValid = (persistedTracks.isNotEmpty() || !persistedPlaylist.hasAnyTracks) &&
+                    (currentTotalTracks == null || persistedPlaylist.total_tracks == currentTotalTracks)
+
+                if (isPersistedCacheValid) {
                     emit(
                         ImportedPlaylistDetailState(
                             isLoading = false,
@@ -931,7 +971,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val lightweightPlaylist = _importedPlaylists.value.find { it.id == playlistId }
             emit(ImportedPlaylistDetailState(isLoading = true, playlist = lightweightPlaylist))
 
             if (_offlineModeEnabled.value) {

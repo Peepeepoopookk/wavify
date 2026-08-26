@@ -115,7 +115,7 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Account", fontWeight = FontWeight.Bold) },
+                title = { Text("Account", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -177,7 +177,7 @@ fun ProfileScreen(
                             text = userPrefs.displayName.take(1).uppercase(),
                             color = avatarContentColor,
                             fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
                 }
@@ -230,7 +230,7 @@ fun ProfileScreen(
                 },
                 label = { Text("Display Name") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done,
@@ -249,8 +249,7 @@ fun ProfileScreen(
             Text(
                 text = "Avatar Color",
                 modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleMedium
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -390,14 +389,13 @@ fun SettingsSection(
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -531,3 +529,4 @@ fun SettingsButtonItem(
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
 }
+

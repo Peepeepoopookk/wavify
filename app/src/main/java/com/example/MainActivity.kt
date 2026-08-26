@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -337,9 +338,14 @@ fun MainAppScaffold(
 
                             // Bottom navigation bar (with minimalist Apple Music label indicators)
                             NavigationBar(
+                                modifier = Modifier
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
+                                    .border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
                                 containerColor = MaterialTheme.colorScheme.surface,
                                 tonalElevation = 0.dp,
-                                windowInsets = WindowInsets.navigationBars
+                                windowInsets = WindowInsets(0, 0, 0, 0)
                             ) {
                         NavigationBarItem(
                             selected = currentDestination == "home",
@@ -728,3 +734,4 @@ fun MainAppScaffold(
         }
     }
 }
+

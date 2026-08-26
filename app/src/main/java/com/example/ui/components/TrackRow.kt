@@ -44,9 +44,9 @@ fun TrackRow(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     var showMenu by remember { mutableStateOf(false) }
-    val rowShape = remember { RoundedCornerShape(16.dp) }
-    val imageShape = remember { RoundedCornerShape(12.dp) }
-    val shadowColor = remember { Color.Black.copy(alpha = 0.08f) }
+    
+    
+    
 
     val haptic = com.example.ui.util.rememberAppHapticFeedback()
 
@@ -54,8 +54,8 @@ fun TrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .shadow(elevation = 2.dp, shape = rowShape, spotColor = shadowColor, ambientColor = shadowColor)
-            .clip(rowShape)
+            
+            .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
             .background(if (isActive) currentAccentColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface)
             .combinedClickable(
                 interactionSource = interactionSource,
@@ -77,14 +77,14 @@ fun TrackRow(
                 albumArt = track.albumArt,
                 fallbackSeed = track.id,
                 contentDescription = null,
-                modifier = Modifier.size(48.dp).clip(imageShape),
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius)).border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
                 requestSize = 128
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -95,7 +95,7 @@ fun TrackRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(track.duration, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(track.duration, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 if (isDownloading) {
@@ -164,7 +164,7 @@ fun TrackContextMenu(
     if (showPlaylistPicker) {
         ModalBottomSheet(onDismissRequest = { showPlaylistPicker = false }) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Add to Playlist", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Add to Playlist", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 LazyColumn {
                     items(localPlaylists, key = { it.id }) { playlist ->
@@ -185,3 +185,4 @@ fun TrackContextMenu(
         }
     }
 }
+

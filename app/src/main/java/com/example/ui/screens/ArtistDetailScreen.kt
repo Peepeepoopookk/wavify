@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,7 +61,7 @@ fun ArtistDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(decodedName, fontWeight = FontWeight.Bold) },
+                title = { Text(decodedName, style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
@@ -144,8 +145,7 @@ fun ArtistHeader(
 
         Text(
             text = name,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.titleMedium
         )
 
         Text(
@@ -179,3 +179,4 @@ fun ArtistHeader(
         }
     }
 }
+

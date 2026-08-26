@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -130,8 +131,7 @@ fun ImportScreen(
                         Text(
                             text = userPrefs.displayName.take(1).uppercase(),
                             color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleLarge
                         )
                     }
                 }
@@ -149,8 +149,7 @@ fun ImportScreen(
                 item {
                     Text(
                         text = "Add Song",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     OutlinedTextField(
@@ -158,7 +157,7 @@ fun ImportScreen(
                         onValueChange = { viewModel.setSongUrl(it) },
                         placeholder = { Text("Spotify Track URL") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
                         singleLine = true,
                         trailingIcon = {
                             if (songUrl.isNotEmpty()) {
@@ -192,7 +191,7 @@ fun ImportScreen(
                                 Icon(Icons.Default.CheckCircle, null, tint = Color.Green, modifier = Modifier.size(16.dp))
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = songStatus, fontSize = 14.sp, color = if (songStatus.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                            Text(text = songStatus, style = MaterialTheme.typography.bodyMedium, color = if (songStatus.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         }
                     }
 
@@ -208,8 +207,7 @@ fun ImportScreen(
                 item {
                     Text(
                         text = "Import Playlist",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     OutlinedTextField(
@@ -217,7 +215,7 @@ fun ImportScreen(
                         onValueChange = { viewModel.setPlaylistUrl(it) },
                         placeholder = { Text("Spotify Playlist URL") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
                         singleLine = true,
                         trailingIcon = {
                             if (playlistUrl.isNotEmpty()) {
@@ -240,7 +238,7 @@ fun ImportScreen(
                             onClick = { 
                                 viewModel.startPlaylistImport(onSuccess = {
                                     mainViewModel.loadImportedPlaylists()
-                                }) 
+                                    }) 
                             },
                             modifier = Modifier.weight(1f),
                             enabled = playlistPreview != null && !isPlaylistLoading
@@ -259,7 +257,7 @@ fun ImportScreen(
                         Text(
                             text = playlistOverallStatus,
                             color = if (playlistOverallStatus.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
 
@@ -275,8 +273,7 @@ fun ImportScreen(
                     ) {
                         Text(
                             text = "My Imports",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -371,15 +368,16 @@ fun TrackPreviewCard(track: Track) {
                 contentDescription = null,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
+                    .border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
                 contentScale = ContentScale.Crop,
                 placeholder = painterResource(R.drawable.ic_placeholder),
                 error = painterResource(R.drawable.ic_placeholder)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(track.artist, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(track.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -388,15 +386,15 @@ fun TrackPreviewCard(track: Track) {
 @Composable
 fun PlaylistPreviewCard(preview: com.example.service.PlaylistPreviewResponse) {
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(com.example.ui.theme.AppCornerRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("${preview.totalTracks} tracks | ${preview.estimatedSize}", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(preview.name, style = MaterialTheme.typography.titleLarge)
+            Text("${preview.totalTracks} tracks | ${preview.estimatedSize}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             preview.firstTracks.take(5).forEach { track ->
-                Text("• ${track.title} - ${track.artist}", fontSize = 12.sp, maxLines = 1)
+                Text("• ${track.title} - ${track.artist}", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             }
         }
     }
@@ -405,8 +403,8 @@ fun PlaylistPreviewCard(preview: com.example.service.PlaylistPreviewResponse) {
 @Composable
 fun StatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -428,15 +426,16 @@ fun ImportedHistoryRow(item: com.example.service.ImportHistoryItem, onClick: () 
             contentDescription = null,
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
+                .border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius)),
             contentScale = ContentScale.Crop,
             placeholder = painterResource(R.drawable.ic_placeholder)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(item.title, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.artist, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(item.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 Spacer(modifier = Modifier.width(8.dp))
                 val sourceLabel = if (item.source == "app_playlist") "From playlist" else "Added directly"
                 Box(
@@ -444,12 +443,12 @@ fun ImportedHistoryRow(item: com.example.service.ImportHistoryItem, onClick: () 
                         .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
-                    Text(sourceLabel, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(sourceLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(item.addedAt, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(item.addedAt, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     HorizontalDivider(modifier = Modifier.padding(start = 60.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))

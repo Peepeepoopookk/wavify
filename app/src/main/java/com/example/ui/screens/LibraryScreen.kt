@@ -102,8 +102,7 @@ fun AnimatedLanguageChip(
     ) {
         Text(
             text = label,
-            fontSize = 14.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            style = if (isSelected) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
             color = contentColor
         )
     }
@@ -230,8 +229,7 @@ fun LibraryScreen(
                     ) {
                         Text(
                             text = title,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 15.sp,
+                            style = if (isSelected) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
                             color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -434,7 +432,8 @@ fun PlaylistGridItem(
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
+                .border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, RoundedCornerShape(com.example.ui.theme.AppCornerRadius))
                 .background(if (coverColor != null) Color(android.graphics.Color.parseColor(coverColor)) else MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
@@ -482,7 +481,7 @@ fun PlaylistGridItem(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(title, fontWeight = FontWeight.Bold, maxLines = 1, fontSize = 14.sp)
+        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
     }
 }
 
@@ -561,8 +560,8 @@ fun DownloadsSubTab(
                 }
                 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("${stats.first} songs", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text(String.format("%.1f MB • %.1f GB free", stats.second, stats.third), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${stats.first} songs", style = MaterialTheme.typography.titleMedium)
+                    Text(String.format("%.1f MB • %.1f GB free", stats.second, stats.third), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -613,8 +612,7 @@ fun EmptyDownloadsState() {
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = "No Downloads",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp
+            style = MaterialTheme.typography.titleLarge
         )
     }
 }
@@ -630,8 +628,7 @@ fun EmptyState(isSearching: Boolean, query: String, lang: String) {
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             if (isSearching) "No Results for \"$query\"" else "No $lang Tracks",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp
+            style = MaterialTheme.typography.titleLarge
         )
     }
 }

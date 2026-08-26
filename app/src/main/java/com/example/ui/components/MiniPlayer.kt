@@ -7,6 +7,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -84,14 +85,10 @@ fun MiniPlayer(
         modifier = modifier
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .fillMaxWidth()
-            .shadow(
-                elevation = 6.dp,
-                shape = cardShape,
-                clip = false
-            ),
+            .border(com.example.ui.theme.OutlineWidth, MaterialTheme.colorScheme.outline, cardShape),
         shape = cardShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -144,7 +141,7 @@ fun MiniPlayer(
                                     }
                                 } else Modifier
                             )
-                            .shadow(elevation = 1.dp, shape = imageShape)
+                            
                             .clip(imageShape)
                             .drawBehind {
                                 drawRect(surfaceVariantColor.copy(alpha = shimmerAlpha))
@@ -187,17 +184,15 @@ fun MiniPlayer(
                 ) {
                     Text(
                         text = track.title,
-                        fontSize = 14.sp, // Song title bold 14sp as requested
-                        fontWeight = FontWeight.W700, // Bold 700 as requested
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         modifier = Modifier.testTag("mini_player_title")
                     )
                     Text(
                         text = track.artist,
-                        fontSize = 12.sp, // Artist 12sp as requested
-                        fontWeight = FontWeight.W500, // Artist font weight 500 as requested
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, // grey as requested
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         modifier = Modifier.testTag("mini_player_artist")
                     )
@@ -247,3 +242,5 @@ fun MiniPlayer(
         }
     }
 }
+
+
