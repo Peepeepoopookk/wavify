@@ -61,6 +61,8 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -141,6 +143,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val INITIAL_UPCOMING_QUEUE_SIZE = 20
         const val QUEUE_APPEND_SIZE = 20
         const val QUEUE_APPEND_THRESHOLD = 5
+        const val DEFAULT_PLAYLIST_CACHE_SIZE = 200
+        const val MAX_CONCURRENT_HYDRATION_REQUESTS = 4
     }
 
     private val repository: MusicRepository = MusicRepositoryImpl()
@@ -768,6 +772,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val deviceId = userPrefsRepository.ensureDeviceId()
             importRepository.getPlaylists(deviceId)
                 .onSuccess { playlists ->
+                    ensurePlaylistCacheCapacity(playlists.size)
                     val visiblePlaylists = playlists
                         .filter { it.id.isNotBlank() && it.name.isNotBlank() && it.hasAnyTracks }
                         .map { playlist -> _playlistDetailsCache.get(playlist.id) ?: cachedDetails[playlist.id] ?: playlist }
@@ -829,14 +834,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val _playlistTracksCache = LruCache<String, List<Track>>(50)
-    private val _playlistDetailsCache = LruCache<String, ImportedPlaylist>(50)
-    private val hydratingImportedPlaylistIds = mutableSetOf<String>()
+
+    private val _playlistTracksCache = LruCache<String, List<Track>>(DEFAULT_PLAYLIST_CACHE_SIZE)
+    private val _playlistDetailsCache = LruCache<String, ImportedPlaylist>(DEFAULT_PLAYLIST_CACHE_SIZE)
+    private val hydratingImportedPlaylistIds = ConcurrentHashMap.newKeySet<String>()
+
+    private fun ensurePlaylistCacheCapacity(count: Int) {
+        val targetCapacity = maxOf(DEFAULT_PLAYLIST_CACHE_SIZE, count + 50)
+        if (_playlistDetailsCache.maxSize() < targetCapacity) {
+            _playlistDetailsCache.resize(targetCapacity)
+            _playlistTracksCache.resize(targetCapacity)
+        }
+    }
 
     private fun mergeImportedPlaylistsWithCachedDetails(
         playlists: List<ImportedPlaylist>,
         cachedDetails: Map<String, ImportedPlaylist>
     ): List<ImportedPlaylist> {
+        ensurePlaylistCacheCapacity(maxOf(playlists.size, cachedDetails.size))
         cachedDetails.values.forEach { cachedPlaylist ->
             if (cachedPlaylist.id.isNotBlank() && cachedPlaylist.hasAnyTracks) {
                 _playlistDetailsCache.put(cachedPlaylist.id, cachedPlaylist)
@@ -888,25 +903,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (targets.isEmpty()) return
 
         viewModelScope.launch {
-            targets.forEach { playlist ->
-                try {
-                    importRepository.getPlaylistDetails(playlist.id)
-                        .onSuccess { fullPlaylist ->
-                            if (fullPlaylist.id.isNotBlank() && fullPlaylist.name.isNotBlank() && fullPlaylist.hasAnyTracks) {
-                                cacheImportedPlaylistDetails(fullPlaylist)
-                            }
+            targets.chunked(MAX_CONCURRENT_HYDRATION_REQUESTS).forEach { batch ->
+                batch.map { playlist ->
+                    async {
+                        try {
+                            importRepository.getPlaylistDetails(playlist.id)
+                                .onSuccess { fullPlaylist ->
+                                    if (fullPlaylist.id.isNotBlank() && fullPlaylist.name.isNotBlank() && fullPlaylist.hasAnyTracks) {
+                                        cacheImportedPlaylistDetails(fullPlaylist)
+                                    }
+                                }
+                                .onFailure { error ->
+                                    Log.w("WavifyViewModel", "Failed to hydrate imported playlist ${playlist.id}", error)
+                                }
+                        } finally {
+                            hydratingImportedPlaylistIds.remove(playlist.id)
                         }
-                        .onFailure { error ->
-                            Log.w("WavifyViewModel", "Failed to hydrate imported playlist ${playlist.id}", error)
-                        }
-                } finally {
-                    hydratingImportedPlaylistIds.remove(playlist.id)
-                }
+                    }
+                }.awaitAll()
             }
         }
     }
 
     private fun cacheImportedPlaylistDetails(playlist: ImportedPlaylist, persist: Boolean = true) {
+        ensurePlaylistCacheCapacity(_importedPlaylists.value.size + 1)
         val resolvedTracks = tracksForImportedPlaylist(playlist)
         _playlistDetailsCache.put(playlist.id, playlist)
         _playlistTracksCache.put(playlist.id, resolvedTracks)
